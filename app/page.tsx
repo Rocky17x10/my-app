@@ -16,6 +16,10 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [editing, setEditing] = useState<number | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -50,9 +54,7 @@ export default function Home() {
     try {
       const response = await fetch('http://localhost:3001/users', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email }),
       });
 
@@ -61,7 +63,6 @@ export default function Home() {
       }
 
       const newUser: User = await response.json();
-
       setUsers((currentUsers) => [...currentUsers, newUser]);
       setName('');
       setEmail('');
@@ -78,9 +79,7 @@ export default function Home() {
       'Are you sure you want to delete this user?',
     );
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     setError('');
     setMessage('');
@@ -89,9 +88,7 @@ export default function Home() {
     try {
       const response = await fetch(
         `http://localhost:3001/users/${userId}`,
-        {
-          method: 'DELETE',
-        },
+        { method: 'DELETE' },
       );
 
       if (!response.ok) {
@@ -101,7 +98,6 @@ export default function Home() {
       setUsers((currentUsers) =>
         currentUsers.filter((user) => user.id !== userId),
       );
-
       setMessage('User deleted successfully!');
     } catch {
       setError('Could not delete user. Please check the backend.');
@@ -110,6 +106,64 @@ export default function Home() {
     }
   }
 
+  function startEditing(user: User) {
+    setEditing(user.id);
+    setEditName(user.name);
+    setEditEmail(user.email);
+    setError('');
+    setMessage('');
+  }
+
+  function cancelEditing() {
+    setEditing(null);
+    setEditName('');
+    setEditEmail('');
+  }
+
+  async function handleUpdate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (editing === null) return;
+
+    setError('');
+    setMessage('');
+    setSavingEdit(true);
+
+    try {
+      const response = await fetch(
+        `http://localhost:3001/users/${editing}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: editName,
+            email: editEmail,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to update user');
+      }
+
+      const updatedUser: User = await response.json();
+
+      setUsers((currentUsers) =>
+        currentUsers.map((user) =>
+          user.id === updatedUser.id ? updatedUser : user,
+        ),
+      );
+
+      setEditing(null);
+      setEditName('');
+      setEditEmail('');
+      setMessage('User updated successfully!');
+    } catch {
+      setError('Could not update user. Please check the backend.');
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   return (
     <main style={{ padding: '40px', fontFamily: 'Arial, sans-serif' }}>
@@ -156,39 +210,86 @@ export default function Home() {
       <h2>User List</h2>
 
       {loading && <p>Loading users...</p>}
-
       {!loading && users.length === 0 && <p>No users found.</p>}
 
-     
-<ul>
-  {users.map((user) => (
-    <li key={user.id} style={{ marginBottom: '16px' }}>
-      <strong>{user.name}</strong>
-      <br />
-      Email: {user.email}
-      <br />
-      ID: {user.id}
-      <br />
-      <button
-        type="button"
-        onClick={() => handleDelete(user.id)}
-        disabled={deleting !== null}
-        style={{
-          padding: '6px 12px',
-          marginTop: '8px',
-          color: 'white',
-          backgroundColor: 'red',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: deleting !== null ? 'not-allowed' : 'pointer',
-        }}
-      >
-        {deleting === user.id ? 'Deleting...' : 'Delete User'}
-      </button>
-    </li>
-  ))}
-</ul>
+      <ul>
+        {users.map((user) => (
+          <li key={user.id} style={{ marginBottom: '20px' }}>
+            {editing === user.id ? (
+              <form
+                onSubmit={handleUpdate}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  maxWidth: '400px',
+                }}
+              >
+                <label htmlFor={`edit-name-${user.id}`}>Name</label>
+                <input
+                  id={`edit-name-${user.id}`}
+                  value={editName}
+                  onChange={(event) => setEditName(event.target.value)}
+                  required
+                  style={{ padding: '8px' }}
+                />
 
+                <label htmlFor={`edit-email-${user.id}`}>Email</label>
+                <input
+                  id={`edit-email-${user.id}`}
+                  type="email"
+                  value={editEmail}
+                  onChange={(event) => setEditEmail(event.target.value)}
+                  required
+                  style={{ padding: '8px' }}
+                />
+
+                <button type="submit" disabled={savingEdit}>
+                  {savingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+
+                <button type="button" onClick={cancelEditing}>
+                  Cancel
+                </button>
+              </form>
+            ) : (
+              <>
+                <strong>{user.name}</strong>
+                <br />
+                Email: {user.email}
+                <br />
+                ID: {user.id}
+                <br />
+
+                <button
+                  type="button"
+                  onClick={() => startEditing(user)}
+                  disabled={editing !== null || deleting !== null}
+                  style={{ padding: '6px 12px', marginTop: '8px' }}
+                >
+                  Edit User
+                </button>{' '}
+
+                <button
+                  type="button"
+                  onClick={() => handleDelete(user.id)}
+                  disabled={deleting !== null || editing !== null}
+                  style={{
+                    padding: '6px 12px',
+                    marginTop: '8px',
+                    color: 'white',
+                    backgroundColor: 'red',
+                    border: 'none',
+                    borderRadius: '4px',
+                  }}
+                >
+                  {deleting === user.id ? 'Deleting...' : 'Delete User'}
+                </button>
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
     </main>
   );
 }
