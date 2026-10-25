@@ -15,6 +15,7 @@ export default function Home() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -72,6 +73,44 @@ export default function Home() {
     }
   }
 
+  async function handleDelete(userId: number) {
+    const confirmed = window.confirm(
+      'Are you sure you want to delete this user?',
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setError('');
+    setMessage('');
+    setDeleting(userId);
+
+    try {
+      const response = await fetch(
+        `http://localhost:3001/users/${userId}`,
+        {
+          method: 'DELETE',
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to delete user');
+      }
+
+      setUsers((currentUsers) =>
+        currentUsers.filter((user) => user.id !== userId),
+      );
+
+      setMessage('User deleted successfully!');
+    } catch {
+      setError('Could not delete user. Please check the backend.');
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+
   return (
     <main style={{ padding: '40px', fontFamily: 'Arial, sans-serif' }}>
       <h1>My Users</h1>
@@ -120,17 +159,36 @@ export default function Home() {
 
       {!loading && users.length === 0 && <p>No users found.</p>}
 
-      <ul>
-        {users.map((user) => (
-          <li key={user.id} style={{ marginBottom: '16px' }}>
-            <strong>{user.name}</strong>
-            <br />
-            Email: {user.email}
-            <br />
-            ID: {user.id}
-          </li>
-        ))}
-      </ul>
+     
+<ul>
+  {users.map((user) => (
+    <li key={user.id} style={{ marginBottom: '16px' }}>
+      <strong>{user.name}</strong>
+      <br />
+      Email: {user.email}
+      <br />
+      ID: {user.id}
+      <br />
+      <button
+        type="button"
+        onClick={() => handleDelete(user.id)}
+        disabled={deleting !== null}
+        style={{
+          padding: '6px 12px',
+          marginTop: '8px',
+          color: 'white',
+          backgroundColor: 'red',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: deleting !== null ? 'not-allowed' : 'pointer',
+        }}
+      >
+        {deleting === user.id ? 'Deleting...' : 'Delete User'}
+      </button>
+    </li>
+  ))}
+</ul>
+
     </main>
   );
 }
