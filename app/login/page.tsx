@@ -2,28 +2,24 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-
-type Profile = {
-  userId: number;
-  email: string;
-};
+import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
+  const router = useRouter();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [profile, setProfile] = useState<Profile | null>(null);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     setLoading(true);
     setError('');
-    setProfile(null);
 
     try {
-      // Step 1: Log in and receive the JWT token
+      // Step 1: Send login credentials to the NestJS backend.
       const loginResponse = await fetch(
         'http://localhost:3001/auth/login',
         {
@@ -45,13 +41,14 @@ export default function LoginPage() {
         );
       }
 
+      // Step 2: Receive the JWT token.
       const token: string = loginData.access_token;
 
       if (!token) {
         throw new Error('The backend did not return an access token.');
       }
 
-      // Step 2: Use the token to access the protected profile
+      // Step 3: Verify the token by requesting the protected profile.
       const profileResponse = await fetch(
         'http://localhost:3001/auth/profile',
         {
@@ -61,15 +58,18 @@ export default function LoginPage() {
         },
       );
 
-      const profileData = await profileResponse.json();
-
       if (!profileResponse.ok) {
         throw new Error('Login succeeded, but profile access failed.');
       }
 
-      // Step 3: Display the authenticated user's information
-      setProfile(profileData.user);
+      // Step 4: Save the token for this browser tab's session.
+      sessionStorage.setItem('access_token', token);
+
+      // Step 5: Redirect to the dashboard.
+      router.push('/dashboard');
     } catch (err) {
+      sessionStorage.removeItem('access_token');
+
       setError(
         err instanceof Error
           ? err.message
@@ -142,22 +142,10 @@ export default function LoginPage() {
         </button>
       </form>
 
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-
-      {profile && (
-        <section
-          style={{
-            marginTop: '24px',
-            padding: '16px',
-            backgroundColor: '#f0fdf4',
-            borderRadius: '8px',
-          }}
-        >
-          <h2>Login successful!</h2>
-          <p>Welcome, {profile.email}</p>
-          <p>User ID: {profile.userId}</p>
-          <p>Your protected profile was loaded successfully.</p>
-        </section>
+      {error && (
+        <p style={{ color: 'red' }}>
+          {error}
+        </p>
       )}
     </main>
   );
