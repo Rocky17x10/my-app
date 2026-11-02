@@ -2,6 +2,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
+
+const API_URL = 'http://localhost:3001';
 
 type User = {
   id: number;
@@ -9,870 +12,1167 @@ type User = {
   email: string;
 };
 
+type AssetStatus = 'available' | 'assigned' | 'maintenance' | 'retired';
+
 type Asset = {
   id: number;
   assetTag: string;
   name: string;
   category: string;
-  brand: string | null;
-  model: string | null;
-  serialNumber: string | null;
-  status: 'available' | 'assigned' | 'maintenance' | 'retired';
-  assignedTo: number | null;
-  department: string | null;
-  location: string | null;
-  purchaseDate: string | null;
-  notes: string | null;
-  createdAt: string;
-  updatedAt: string;
+  brand?: string | null;
+  model?: string | null;
+  serialNumber?: string | null;
+  status: AssetStatus;
+  assignedTo: User | null;
+  department?: string | null;
+  location?: string | null;
+  purchaseDate?: string | null;
+  notes?: string | null;
 };
 
-const API_URL = 'http://localhost:3001';
+type AssetForm = {
+  assetTag: string;
+  name: string;
+  category: string;
+  brand: string;
+  model: string;
+  serialNumber: string;
+  status: AssetStatus;
+  assignedTo: string;
+  department: string;
+  location: string;
+  purchaseDate: string;
+  notes: string;
+};
 
-export default function Home() {
-  // User state
-  const [users, setUsers] = useState<User[]>([]);
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState<number | null>(null);
-  const [editing, setEditing] = useState<number | null>(null);
-  const [editName, setEditName] = useState('');
-  const [editEmail, setEditEmail] = useState('');
-  const [savingEdit, setSavingEdit] = useState(false);
+const emptyAssetForm: AssetForm = {
+  assetTag: '',
+  name: '',
+  category: '',
+  brand: '',
+  model: '',
+  serialNumber: '',
+  status: 'available',
+  assignedTo: '',
+  department: '',
+  location: '',
+  purchaseDate: '',
+  notes: '',
+};
 
-  // Asset state
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '10px 12px',
+  border: '1px solid #d1d5db',
+  borderRadius: 6,
+  fontSize: 14,
+  background: '#fff',
+  color: '#111827',
+};
+
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  marginBottom: 6,
+  fontSize: 13,
+  fontWeight: 600,
+  color: '#374151',
+};
+
+const buttonStyle: React.CSSProperties = {
+  padding: '9px 15px',
+  border: 'none',
+  borderRadius: 6,
+  cursor: 'pointer',
+  fontSize: 13,
+  fontWeight: 600,
+};
+
+const statusStyle = (status: AssetStatus): React.CSSProperties => {
+  const colors: Record<AssetStatus, { background: string; color: string }> = {
+    available: { background: '#dcfce7', color: '#166534' },
+    assigned: { background: '#dbeafe', color: '#1d4ed8' },
+    maintenance: { background: '#fef3c7', color: '#92400e' },
+    retired: { background: '#fee2e2', color: '#991b1b' },
+  };
+
+  return {
+    display: 'inline-block',
+    padding: '4px 9px',
+    borderRadius: 20,
+    fontSize: 11,
+    fontWeight: 700,
+    textTransform: 'capitalize',
+    ...colors[status],
+  };
+};
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Something went wrong.';
+}
+
+export default function DashboardPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [assetsLoading, setAssetsLoading] = useState(true);
-  const [assetsError, setAssetsError] = useState('');
-  const [savingAsset, setSavingAsset] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [assetSearch, setAssetSearch] = useState('');
+  const [assetError, setAssetError] = useState('');
   const [assetMessage, setAssetMessage] = useState('');
-  const [assetFormError, setAssetFormError] = useState('');
+  const [userError, setUserError] = useState('');
+  const [userMessage, setUserMessage] = useState('');
 
-  // Asset form fields
-  const [assetTag, setAssetTag] = useState('');
-  const [assetName, setAssetName] = useState('');
-  const [assetCategory, setAssetCategory] = useState('');
-  const [assetBrand, setAssetBrand] = useState('');
-  const [assetModel, setAssetModel] = useState('');
-  const [assetSerialNumber, setAssetSerialNumber] = useState('');
-  const [assetStatus, setAssetStatus] =
-    useState<Asset['status']>('available');
-  const [assetDepartment, setAssetDepartment] = useState('');
-  const [assetLocation, setAssetLocation] = useState('');
-  const [assetPurchaseDate, setAssetPurchaseDate] = useState('');
-  const [assetNotes, setAssetNotes] = useState('');
+  const [showAssetForm, setShowAssetForm] = useState(false);
+  const [editingAssetId, setEditingAssetId] = useState<number | null>(null);
+  const [assetForm, setAssetForm] = useState<AssetForm>(emptyAssetForm);
+  const [savingAsset, setSavingAsset] = useState(false);
 
-  // Shared user messages
-  const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
+  const [showUserForm, setShowUserForm] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<number | null>(null);
+  const [userForm, setUserForm] = useState({
+    name: '',
+    email: '',
+  });
+  const [savingUser, setSavingUser] = useState(false);
 
-  async function fetchUsers() {
+  async function refreshData() {
+    setLoading(true);
+    setAssetError('');
+
     try {
-      const response = await fetch(`${API_URL}/users`);
+      const [assetsResponse, usersResponse] = await Promise.all([
+        fetch(`${API_URL}/assets`),
+        fetch(`${API_URL}/users`),
+      ]);
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch users');
+      if (!assetsResponse.ok) {
+        throw new Error('Could not load assets from backend.');
       }
 
-      const data: User[] = await response.json();
-      setUsers(data);
-      setError('');
-    } catch {
-      setError('Could not load users. Please check the backend.');
+      if (!usersResponse.ok) {
+        throw new Error('Could not load users from backend.');
+      }
+
+      const assetsData = await assetsResponse.json();
+      const usersData = await usersResponse.json();
+
+      setAssets(Array.isArray(assetsData) ? assetsData : []);
+      setUsers(Array.isArray(usersData) ? usersData : []);
+    } catch (error) {
+      setAssetError(getErrorMessage(error));
     } finally {
       setLoading(false);
     }
   }
 
-  async function fetchAssets() {
-    try {
-      const response = await fetch(`${API_URL}/assets`);
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch assets');
-      }
-
-      const data: Asset[] = await response.json();
-      setAssets(data);
-      setAssetsError('');
-    } catch {
-      setAssetsError('Could not load assets. Please check the backend.');
-    } finally {
-      setAssetsLoading(false);
-    }
-  }
-
   useEffect(() => {
-    void fetchUsers();
-    void fetchAssets();
+    void refreshData();
   }, []);
 
-  // Create user
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError('');
-    setMessage('');
-    setSaving(true);
-
-    try {
-      const response = await fetch(`${API_URL}/users`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        throw new Error(
-          data?.message
-            ? Array.isArray(data.message)
-              ? data.message.join(', ')
-              : data.message
-            : 'Failed to create user',
-        );
-      }
-
-      const newUser: User = await response.json();
-      setUsers((currentUsers) => [...currentUsers, newUser]);
-      setName('');
-      setEmail('');
-      setPassword('');
-      setMessage('User added successfully!');
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Could not add user. Please check the backend.',
-      );
-    } finally {
-      setSaving(false);
-    }
+  function updateAssetField(field: keyof AssetForm, value: string) {
+    setAssetForm((previous) => ({
+      ...previous,
+      [field]: value,
+    }));
   }
 
-  // Delete user
-  async function handleDelete(userId: number) {
-    const confirmed = window.confirm(
-      'Are you sure you want to delete this user?',
-    );
-
-    if (!confirmed) return;
-
-    setError('');
-    setMessage('');
-    setDeleting(userId);
-
-    try {
-      const response = await fetch(`${API_URL}/users/${userId}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete user');
-      }
-
-      setUsers((currentUsers) =>
-        currentUsers.filter((user) => user.id !== userId),
-      );
-      setMessage('User deleted successfully!');
-    } catch {
-      setError('Could not delete user. Please check the backend.');
-    } finally {
-      setDeleting(null);
-    }
-  }
-
-  // Start editing a user
-  function startEditing(user: User) {
-    setEditing(user.id);
-    setEditName(user.name);
-    setEditEmail(user.email);
-    setError('');
-    setMessage('');
-  }
-
-  function cancelEditing() {
-    setEditing(null);
-    setEditName('');
-    setEditEmail('');
-  }
-
-  // Update user
-  async function handleUpdate(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (editing === null) return;
-
-    setError('');
-    setMessage('');
-    setSavingEdit(true);
-
-    try {
-      const response = await fetch(`${API_URL}/users/${editing}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: editName,
-          email: editEmail,
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        throw new Error(
-          data?.message
-            ? Array.isArray(data.message)
-              ? data.message.join(', ')
-              : data.message
-            : 'Failed to update user',
-        );
-      }
-
-      const updatedUser: User = await response.json();
-
-      setUsers((currentUsers) =>
-        currentUsers.map((user) =>
-          user.id === updatedUser.id ? updatedUser : user,
-        ),
-      );
-
-      setEditing(null);
-      setEditName('');
-      setEditEmail('');
-      setMessage('User updated successfully!');
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Could not update user. Please check the backend.',
-      );
-    } finally {
-      setSavingEdit(false);
-    }
-  }
-
-  // Create asset
-  async function handleAssetSubmit(
-    event: React.FormEvent<HTMLFormElement>,
-  ) {
-    event.preventDefault();
+  function startAddAsset() {
+    setEditingAssetId(null);
+    setAssetForm(emptyAssetForm);
+    setAssetError('');
     setAssetMessage('');
-    setAssetFormError('');
+    setShowAssetForm(true);
+  }
+
+  function startEditAsset(asset: Asset) {
+    setEditingAssetId(asset.id);
+
+    setAssetForm({
+      assetTag: asset.assetTag ?? '',
+      name: asset.name ?? '',
+      category: asset.category ?? '',
+      brand: asset.brand ?? '',
+      model: asset.model ?? '',
+      serialNumber: asset.serialNumber ?? '',
+      status: asset.status ?? 'available',
+      assignedTo: asset.assignedTo
+        ? String(asset.assignedTo.id)
+        : '',
+      department: asset.department ?? '',
+      location: asset.location ?? '',
+      purchaseDate: asset.purchaseDate
+        ? asset.purchaseDate.substring(0, 10)
+        : '',
+      notes: asset.notes ?? '',
+    });
+
+    setAssetError('');
+    setAssetMessage('');
+    setShowAssetForm(true);
+  }
+
+  async function saveAsset(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
     setSavingAsset(true);
+    setAssetError('');
+    setAssetMessage('');
+
+    if (assetForm.status === 'assigned' && !assetForm.assignedTo) {
+      setAssetError('Please select a user before assigning this asset.');
+      setSavingAsset(false);
+      return;
+    }
 
     try {
-      const response = await fetch(`${API_URL}/assets`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          assetTag: assetTag.trim(),
-          name: assetName.trim(),
-          category: assetCategory.trim(),
-          brand: assetBrand.trim() || null,
-          model: assetModel.trim() || null,
-          serialNumber: assetSerialNumber.trim() || null,
-          status: assetStatus,
-          department: assetDepartment.trim() || null,
-          location: assetLocation.trim() || null,
-          purchaseDate: assetPurchaseDate || null,
-          notes: assetNotes.trim() || null,
-        }),
+      const url = editingAssetId
+        ? `${API_URL}/assets/${editingAssetId}`
+        : `${API_URL}/assets`;
+
+      const payload = {
+        ...assetForm,
+        assignedTo: assetForm.assignedTo
+          ? Number(assetForm.assignedTo)
+          : null,
+        purchaseDate: assetForm.purchaseDate || null,
+      };
+
+      const response = await fetch(url, {
+        method: editingAssetId ? 'PATCH' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        const data = await response.json().catch(() => null);
+        const errorData = await response.json().catch(() => null);
+
         throw new Error(
-          data?.message
-            ? Array.isArray(data.message)
-              ? data.message.join(', ')
-              : data.message
-            : 'Failed to create asset',
+          errorData?.message
+            ? Array.isArray(errorData.message)
+              ? errorData.message.join(', ')
+              : errorData.message
+            : 'Could not save asset.',
         );
       }
 
-      const newAsset: Asset = await response.json();
-
-      setAssets((currentAssets) => [newAsset, ...currentAssets]);
-
-      setAssetTag('');
-      setAssetName('');
-      setAssetCategory('');
-      setAssetBrand('');
-      setAssetModel('');
-      setAssetSerialNumber('');
-      setAssetStatus('available');
-      setAssetDepartment('');
-      setAssetLocation('');
-      setAssetPurchaseDate('');
-      setAssetNotes('');
-
-      setAssetMessage(`Asset "${newAsset.assetTag}" added successfully!`);
-    } catch (err) {
-      setAssetFormError(
-        err instanceof Error
-          ? err.message
-          : 'Could not add asset. Please check the backend.',
+      setAssetMessage(
+        editingAssetId
+          ? 'Asset updated successfully.'
+          : 'Asset added successfully.',
       );
+
+      setShowAssetForm(false);
+      setEditingAssetId(null);
+      setAssetForm(emptyAssetForm);
+
+      await refreshData();
+    } catch (error) {
+      setAssetError(getErrorMessage(error));
     } finally {
       setSavingAsset(false);
     }
   }
 
-  // Shared styles
-  const sectionStyle: React.CSSProperties = {
-    backgroundColor: '#ffffff',
-    padding: '24px',
-    marginBottom: '28px',
-    borderRadius: '10px',
-    border: '1px solid #e5e7eb',
-  };
-
-  const inputStyle: React.CSSProperties = {
-    padding: '10px',
-    border: '1px solid #d1d5db',
-    borderRadius: '5px',
-    width: '100%',
-    boxSizing: 'border-box',
-    font: 'inherit',
-    marginTop: '6px',
-  };
-
-  const buttonStyle: React.CSSProperties = {
-    padding: '9px 14px',
-    border: 'none',
-    borderRadius: '5px',
-    cursor: 'pointer',
-  };
-
-  const tableStyle: React.CSSProperties = {
-    width: '100%',
-    borderCollapse: 'collapse',
-    minWidth: '850px',
-  };
-
-  const cellStyle: React.CSSProperties = {
-    padding: '12px',
-    borderBottom: '1px solid #e5e7eb',
-    textAlign: 'left',
-    fontSize: '14px',
-  };
-
-  function statusStyle(status: Asset['status']): React.CSSProperties {
-    const colors = {
-      available: { background: '#dcfce7', color: '#166534' },
-      assigned: { background: '#dbeafe', color: '#1d4ed8' },
-      maintenance: { background: '#fef3c7', color: '#92400e' },
-      retired: { background: '#f3f4f6', color: '#374151' },
-    };
-
-    return {
-      backgroundColor: colors[status].background,
-      color: colors[status].color,
-      padding: '4px 9px',
-      borderRadius: '12px',
-      fontSize: '12px',
-      fontWeight: 600,
-      whiteSpace: 'nowrap',
-    };
+  function startAddUser() {
+    setEditingUserId(null);
+    setUserForm({ name: '', email: '' });
+    setUserError('');
+    setUserMessage('');
+    setShowUserForm(true);
   }
+
+  function startEditUser(user: User) {
+    setEditingUserId(user.id);
+    setUserForm({
+      name: user.name,
+      email: user.email,
+    });
+    setUserError('');
+    setUserMessage('');
+    setShowUserForm(true);
+  }
+
+  async function saveUser(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSavingUser(true);
+    setUserError('');
+    setUserMessage('');
+
+    try {
+      const url = editingUserId
+        ? `${API_URL}/users/${editingUserId}`
+        : `${API_URL}/users`;
+
+      const response = await fetch(url, {
+        method: editingUserId ? 'PATCH' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(userForm),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+
+        throw new Error(
+          errorData?.message
+            ? Array.isArray(errorData.message)
+              ? errorData.message.join(', ')
+              : errorData.message
+            : 'Could not save user.',
+        );
+      }
+
+      setUserMessage(
+        editingUserId
+          ? 'User updated successfully.'
+          : 'User added successfully.',
+      );
+
+      setShowUserForm(false);
+      setEditingUserId(null);
+      setUserForm({ name: '', email: '' });
+
+      await refreshData();
+    } catch (error) {
+      setUserError(getErrorMessage(error));
+    } finally {
+      setSavingUser(false);
+    }
+  }
+
+  async function deleteUser(user: User) {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${user.name}?`,
+    );
+
+    if (!confirmed) return;
+
+    setUserError('');
+    setUserMessage('');
+
+    try {
+      const response = await fetch(`${API_URL}/users/${user.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+
+        throw new Error(
+          errorData?.message || 'Could not delete user.',
+        );
+      }
+
+      setUserMessage('User deleted successfully.');
+      await refreshData();
+    } catch (error) {
+      setUserError(getErrorMessage(error));
+    }
+  }
+
+  const filteredAssets = assets.filter((asset) => {
+    const search = assetSearch.toLowerCase();
+
+    return [
+      asset.assetTag,
+      asset.name,
+      asset.category,
+      asset.brand,
+      asset.model,
+      asset.serialNumber,
+      asset.status,
+      asset.assignedTo?.name,
+      asset.assignedTo?.email,
+      asset.department,
+      asset.location,
+    ]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(search));
+  });
+
+  const availableCount = assets.filter(
+    (asset) => asset.status === 'available',
+  ).length;
+
+  const assignedCount = assets.filter(
+    (asset) => asset.status === 'assigned',
+  ).length;
+
+  const maintenanceCount = assets.filter(
+    (asset) => asset.status === 'maintenance',
+  ).length;
 
   return (
     <main
       style={{
-        padding: '32px',
-        fontFamily: 'Arial, sans-serif',
-        backgroundColor: '#f8fafc',
-        color: '#1f2937',
         minHeight: '100vh',
+        background: '#f3f4f6',
+        padding: 24,
+        color: '#111827',
       }}
     >
-      <header style={{ marginBottom: '28px' }}>
-        <h1 style={{ fontSize: '30px', marginBottom: '8px' }}>
-          IT Inventory Dashboard
-        </h1>
-        <p style={{ color: '#64748b', margin: 0 }}>
-          Manage IT assets and users from your NestJS backend and MySQL database.
-        </p>
-      </header>
-
-      {/* Inventory summary */}
-      <section
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: '16px',
-          marginBottom: '28px',
-        }}
-      >
-        <div style={{ ...sectionStyle, marginBottom: 0 }}>
-          <p style={{ color: '#64748b', margin: '0 0 8px' }}>
-            Total Assets
-          </p>
-          <h2 style={{ fontSize: '30px', margin: 0 }}>
-            {assetsLoading ? '...' : assets.length}
-          </h2>
-        </div>
-
-        <div style={{ ...sectionStyle, marginBottom: 0 }}>
-          <p style={{ color: '#64748b', margin: '0 0 8px' }}>
-            Available Assets
-          </p>
-          <h2 style={{ fontSize: '30px', margin: 0 }}>
-            {assetsLoading
-              ? '...'
-              : assets.filter((asset) => asset.status === 'available').length}
-          </h2>
-        </div>
-
-        <div style={{ ...sectionStyle, marginBottom: 0 }}>
-          <p style={{ color: '#64748b', margin: '0 0 8px' }}>
-            Assigned Assets
-          </p>
-          <h2 style={{ fontSize: '30px', margin: 0 }}>
-            {assetsLoading
-              ? '...'
-              : assets.filter((asset) => asset.status === 'assigned').length}
-          </h2>
-        </div>
-      </section>
-
-      {/* Add new asset */}
-      <section style={sectionStyle}>
-        <h2 style={{ marginTop: 0 }}>Add New Asset</h2>
-        <p style={{ color: '#64748b' }}>
-          Register a new computer, monitor, or other IT asset.
-        </p>
-
-        <form
-          onSubmit={handleAssetSubmit}
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '16px',
-          }}
-        >
-          <div>
-            <label htmlFor="asset-tag">Asset Tag *</label>
-            <input
-              id="asset-tag"
-              value={assetTag}
-              onChange={(event) => setAssetTag(event.target.value)}
-              placeholder="e.g. AST-003"
-              required
-              style={inputStyle}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="asset-name">Asset Name *</label>
-            <input
-              id="asset-name"
-              value={assetName}
-              onChange={(event) => setAssetName(event.target.value)}
-              placeholder="e.g. Dell Monitor"
-              required
-              style={inputStyle}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="asset-category">Category *</label>
-            <input
-              id="asset-category"
-              value={assetCategory}
-              onChange={(event) => setAssetCategory(event.target.value)}
-              placeholder="Laptop, Monitor, Printer"
-              required
-              style={inputStyle}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="asset-brand">Brand</label>
-            <input
-              id="asset-brand"
-              value={assetBrand}
-              onChange={(event) => setAssetBrand(event.target.value)}
-              placeholder="e.g. HP, Dell, Lenovo"
-              style={inputStyle}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="asset-model">Model</label>
-            <input
-              id="asset-model"
-              value={assetModel}
-              onChange={(event) => setAssetModel(event.target.value)}
-              placeholder="Model number"
-              style={inputStyle}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="asset-serial">Serial Number</label>
-            <input
-              id="asset-serial"
-              value={assetSerialNumber}
-              onChange={(event) => setAssetSerialNumber(event.target.value)}
-              placeholder="Serial number"
-              style={inputStyle}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="asset-status">Status</label>
-            <select
-              id="asset-status"
-              value={assetStatus}
-              onChange={(event) =>
-                setAssetStatus(event.target.value as Asset['status'])
-              }
-              style={inputStyle}
-            >
-              <option value="available">Available</option>
-              <option value="assigned">Assigned</option>
-              <option value="maintenance">Maintenance</option>
-              <option value="retired">Retired</option>
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="asset-department">Department</label>
-            <input
-              id="asset-department"
-              value={assetDepartment}
-              onChange={(event) => setAssetDepartment(event.target.value)}
-              placeholder="e.g. IT"
-              style={inputStyle}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="asset-location">Location</label>
-            <input
-              id="asset-location"
-              value={assetLocation}
-              onChange={(event) => setAssetLocation(event.target.value)}
-              placeholder="e.g. Head Office"
-              style={inputStyle}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="asset-purchase-date">Purchase Date</label>
-            <input
-              id="asset-purchase-date"
-              type="date"
-              value={assetPurchaseDate}
-              onChange={(event) => setAssetPurchaseDate(event.target.value)}
-              style={inputStyle}
-            />
-          </div>
-
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label htmlFor="asset-notes">Notes</label>
-            <textarea
-              id="asset-notes"
-              value={assetNotes}
-              onChange={(event) => setAssetNotes(event.target.value)}
-              placeholder="Additional information about this asset"
-              rows={3}
-              style={inputStyle}
-            />
-          </div>
-
-          <div
-            style={{
-              gridColumn: '1 / -1',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              flexWrap: 'wrap',
-            }}
-          >
-            <button
-              type="submit"
-              disabled={savingAsset}
-              style={{
-                ...buttonStyle,
-                backgroundColor: '#2563eb',
-                color: '#ffffff',
-                opacity: savingAsset ? 0.7 : 1,
-              }}
-            >
-              {savingAsset ? 'Saving Asset...' : 'Save Asset'}
-            </button>
-
-            {assetMessage && (
-              <p role="status" style={{ color: '#15803d', margin: 0 }}>
-                {assetMessage}
-              </p>
-            )}
-
-            {assetFormError && (
-              <p role="alert" style={{ color: '#b91c1c', margin: 0 }}>
-                {assetFormError}
-              </p>
-            )}
-          </div>
-        </form>
-      </section>
-
-      {/* Assets inventory */}
-      <section style={sectionStyle}>
-        <div
+      <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+        <header
           style={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            gap: '12px',
             flexWrap: 'wrap',
-            marginBottom: '20px',
+            gap: 16,
+            marginBottom: 28,
           }}
         >
           <div>
-            <h2 style={{ margin: '0 0 6px' }}>Assets Inventory</h2>
-            <p style={{ color: '#64748b', margin: 0 }}>
-              Assets retrieved from your MySQL database.
+            <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0 }}>
+              IT Inventory Dashboard
+            </h1>
+            <p style={{ color: '#6b7280', marginTop: 7 }}>
+              Manage your organization&apos;s IT assets and users.
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              setAssetsLoading(true);
-              void fetchAssets();
-            }}
-            disabled={assetsLoading}
+          <nav style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <Link
+              href="/"
+              style={{
+                ...buttonStyle,
+                background: '#2563eb',
+                color: '#fff',
+                textDecoration: 'none',
+              }}
+            >
+              Dashboard
+            </Link>
+
+            <Link
+              href="/users"
+              style={{
+                ...buttonStyle,
+                background: '#fff',
+                color: '#374151',
+                border: '1px solid #d1d5db',
+                textDecoration: 'none',
+              }}
+            >
+              Users Page
+            </Link>
+          </nav>
+        </header>
+
+        {assetError && (
+          <div
             style={{
-              ...buttonStyle,
-              backgroundColor: '#2563eb',
-              color: '#ffffff',
+              background: '#fee2e2',
+              color: '#991b1b',
+              padding: 12,
+              borderRadius: 7,
+              marginBottom: 16,
             }}
           >
-            {assetsLoading ? 'Loading...' : 'Refresh Assets'}
-          </button>
-        </div>
-
-        {assetsError && (
-          <p role="alert" style={{ color: '#b91c1c' }}>
-            {assetsError}
-          </p>
+            {assetError}
+          </div>
         )}
 
-        {assetsLoading ? (
-          <p>Loading assets...</p>
-        ) : !assetsError && assets.length === 0 ? (
-          <p>No assets found in the database.</p>
-        ) : (
-          !assetsError && (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={tableStyle}>
-                <thead>
-                  <tr style={{ backgroundColor: '#f1f5f9' }}>
-                    {[
-                      'Asset Tag',
-                      'Name',
-                      'Category',
-                      'Brand',
-                      'Model',
-                      'Serial Number',
-                      'Status',
-                      'Department',
-                      'Location',
-                    ].map((heading) => (
-                      <th key={heading} style={cellStyle}>
-                        {heading}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
+        {assetMessage && (
+          <div
+            style={{
+              background: '#dcfce7',
+              color: '#166534',
+              padding: 12,
+              borderRadius: 7,
+              marginBottom: 16,
+            }}
+          >
+            {assetMessage}
+          </div>
+        )}
 
-                <tbody>
-                  {assets.map((asset) => (
+        <section
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: 16,
+            marginBottom: 28,
+          }}
+        >
+          {[
+            { label: 'Total Assets', value: assets.length, color: '#2563eb' },
+            { label: 'Available', value: availableCount, color: '#16a34a' },
+            { label: 'Assigned', value: assignedCount, color: '#7c3aed' },
+            {
+              label: 'Maintenance',
+              value: maintenanceCount,
+              color: '#d97706',
+            },
+            { label: 'Total Users', value: users.length, color: '#0891b2' },
+          ].map((item) => (
+            <div
+              key={item.label}
+              style={{
+                background: '#fff',
+                padding: 20,
+                borderRadius: 10,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                borderLeft: `4px solid ${item.color}`,
+              }}
+            >
+              <p style={{ color: '#6b7280', fontSize: 13, margin: 0 }}>
+                {item.label}
+              </p>
+              <p
+                style={{
+                  fontSize: 30,
+                  fontWeight: 800,
+                  margin: '8px 0 0',
+                }}
+              >
+                {loading ? '—' : item.value}
+              </p>
+            </div>
+          ))}
+        </section>
+
+        {/* Assets section */}
+        <section
+          style={{
+            background: '#fff',
+            borderRadius: 10,
+            padding: 20,
+            marginBottom: 28,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 12,
+              marginBottom: 18,
+            }}
+          >
+            <div>
+              <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>
+                IT Assets
+              </h2>
+              <p style={{ color: '#6b7280', fontSize: 13, marginTop: 5 }}>
+                View, add, and update inventory assets.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={startAddAsset}
+              style={{
+                ...buttonStyle,
+                background: '#2563eb',
+                color: '#fff',
+              }}
+            >
+              + Add Asset
+            </button>
+          </div>
+
+          {showAssetForm && (
+            <form
+              onSubmit={saveAsset}
+              style={{
+                background: '#f9fafb',
+                padding: 18,
+                border: '1px solid #e5e7eb',
+                borderRadius: 8,
+                marginBottom: 20,
+              }}
+            >
+              <h3 style={{ fontSize: 17, fontWeight: 700, marginTop: 0 }}>
+                {editingAssetId ? 'Edit Asset' : 'Add New Asset'}
+              </h3>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: 14,
+                }}
+              >
+                <div>
+                  <label style={labelStyle}>Asset Tag *</label>
+                  <input
+                    required
+                    style={inputStyle}
+                    value={assetForm.assetTag}
+                    onChange={(e) =>
+                      updateAssetField('assetTag', e.target.value)
+                    }
+                    placeholder="e.g. IT-001"
+                  />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Asset Name *</label>
+                  <input
+                    required
+                    style={inputStyle}
+                    value={assetForm.name}
+                    onChange={(e) => updateAssetField('name', e.target.value)}
+                    placeholder="e.g. Laptop"
+                  />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Category *</label>
+                  <input
+                    required
+                    style={inputStyle}
+                    value={assetForm.category}
+                    onChange={(e) =>
+                      updateAssetField('category', e.target.value)
+                    }
+                    placeholder="e.g. Laptop, Printer"
+                  />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Brand</label>
+                  <input
+                    style={inputStyle}
+                    value={assetForm.brand}
+                    onChange={(e) => updateAssetField('brand', e.target.value)}
+                    placeholder="e.g. Dell"
+                  />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Model</label>
+                  <input
+                    style={inputStyle}
+                    value={assetForm.model}
+                    onChange={(e) => updateAssetField('model', e.target.value)}
+                    placeholder="Model"
+                  />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Serial Number</label>
+                  <input
+                    style={inputStyle}
+                    value={assetForm.serialNumber}
+                    onChange={(e) =>
+                      updateAssetField('serialNumber', e.target.value)
+                    }
+                    placeholder="Serial number"
+                  />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Status *</label>
+                  <select
+                    style={inputStyle}
+                    value={assetForm.status}
+                    onChange={(e) =>
+                      updateAssetField('status', e.target.value)
+                    }
+                  >
+                    <option value="available">Available</option>
+                    <option value="assigned">Assigned</option>
+                    <option value="maintenance">Maintenance</option>
+                    <option value="retired">Retired</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={labelStyle}>
+                    Assigned To
+                    {assetForm.status === 'assigned' ? ' *' : ''}
+                  </label>
+
+                  <select
+                    style={inputStyle}
+                    value={assetForm.assignedTo}
+                    required={assetForm.status === 'assigned'}
+                    onChange={(e) =>
+                      updateAssetField('assignedTo', e.target.value)
+                    }
+                  >
+                    <option value="">-- Select User --</option>
+
+                    {users.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name} ({user.email})
+                      </option>
+                    ))}
+                  </select>
+
+                  {users.length === 0 && (
+                    <p style={{ color: '#b91c1c', fontSize: 12 }}>
+                      No users found. Add a user first.
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Department</label>
+                  <input
+                    style={inputStyle}
+                    value={assetForm.department}
+                    onChange={(e) =>
+                      updateAssetField('department', e.target.value)
+                    }
+                    placeholder="Department"
+                  />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Location</label>
+                  <input
+                    style={inputStyle}
+                    value={assetForm.location}
+                    onChange={(e) =>
+                      updateAssetField('location', e.target.value)
+                    }
+                    placeholder="Office / Room"
+                  />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Purchase Date</label>
+                  <input
+                    type="date"
+                    style={inputStyle}
+                    value={assetForm.purchaseDate}
+                    onChange={(e) =>
+                      updateAssetField('purchaseDate', e.target.value)
+                    }
+                  />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Notes</label>
+                  <input
+                    style={inputStyle}
+                    value={assetForm.notes}
+                    onChange={(e) => updateAssetField('notes', e.target.value)}
+                    placeholder="Additional notes"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+                <button
+                  type="submit"
+                  disabled={savingAsset}
+                  style={{
+                    ...buttonStyle,
+                    background: '#2563eb',
+                    color: '#fff',
+                    opacity: savingAsset ? 0.6 : 1,
+                  }}
+                >
+                  {savingAsset
+                    ? 'Saving...'
+                    : editingAssetId
+                      ? 'Update Asset'
+                      : 'Save Asset'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAssetForm(false)}
+                  style={{
+                    ...buttonStyle,
+                    background: '#e5e7eb',
+                    color: '#374151',
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+
+          <div style={{ marginBottom: 16, maxWidth: 400 }}>
+            <input
+              style={inputStyle}
+              value={assetSearch}
+              onChange={(e) => setAssetSearch(e.target.value)}
+              placeholder="Search by tag, name, category, brand, user..."
+            />
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                fontSize: 13,
+                minWidth: 850,
+              }}
+            >
+              <thead>
+                <tr style={{ background: '#f9fafb', textAlign: 'left' }}>
+                  {[
+                    'Asset Tag',
+                    'Asset Name',
+                    'Category',
+                    'Brand / Model',
+                    'Assigned To',
+                    'Department',
+                    'Status',
+                    'Action',
+                  ].map((heading) => (
+                    <th
+                      key={heading}
+                      style={{
+                        padding: 12,
+                        borderBottom: '1px solid #e5e7eb',
+                        color: '#4b5563',
+                      }}
+                    >
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={8} style={{ padding: 24, textAlign: 'center' }}>
+                      Loading assets...
+                    </td>
+                  </tr>
+                ) : filteredAssets.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ padding: 24, textAlign: 'center' }}>
+                      No assets found.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredAssets.map((asset) => (
                     <tr key={asset.id}>
-                      <td style={cellStyle}>{asset.assetTag}</td>
-                      <td style={cellStyle}>{asset.name}</td>
-                      <td style={cellStyle}>{asset.category}</td>
-                      <td style={cellStyle}>{asset.brand || '—'}</td>
-                      <td style={cellStyle}>{asset.model || '—'}</td>
-                      <td style={cellStyle}>{asset.serialNumber || '—'}</td>
-                      <td style={cellStyle}>
+                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
+                        {asset.assetTag}
+                      </td>
+
+                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
+                        {asset.name}
+                      </td>
+
+                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
+                        {asset.category}
+                      </td>
+
+                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
+                        {[asset.brand, asset.model].filter(Boolean).join(' / ') || '—'}
+                      </td>
+
+                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
+                        {asset.assignedTo ? (
+                          <div>
+                            <div style={{ fontWeight: 600 }}>
+                              {asset.assignedTo.name}
+                            </div>
+                            <div style={{ color: '#6b7280', fontSize: 11 }}>
+                              {asset.assignedTo.email}
+                            </div>
+                          </div>
+                        ) : (
+                          <span style={{ color: '#9ca3af' }}>Unassigned</span>
+                        )}
+                      </td>
+
+                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
+                        {asset.department || '—'}
+                      </td>
+
+                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
                         <span style={statusStyle(asset.status)}>
                           {asset.status}
                         </span>
                       </td>
-                      <td style={cellStyle}>{asset.department || '—'}</td>
-                      <td style={cellStyle}>{asset.location || '—'}</td>
+
+                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
+                        <button
+                          type="button"
+                          onClick={() => startEditAsset(asset)}
+                          style={{
+                            ...buttonStyle,
+                            background: '#dbeafe',
+                            color: '#1d4ed8',
+                          }}
+                        >
+                          Edit
+                        </button>
+                      </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )
-        )}
-      </section>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
-      {/* User management */}
-      <section style={sectionStyle}>
-        <h2 style={{ marginTop: 0 }}>User Management</h2>
-        <p style={{ color: '#64748b' }}>
-          Add, edit, and delete users in your database.
-        </p>
-
-        <h3>Add New User</h3>
-
-        <form
-          onSubmit={handleSubmit}
+        {/* Users section */}
+        <section
           style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-            maxWidth: '400px',
+            background: '#fff',
+            borderRadius: 10,
+            padding: 20,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
           }}
         >
-          <input
-            type="text"
-            placeholder="Enter name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            required
-            style={inputStyle}
-          />
-
-          <input
-            type="email"
-            placeholder="Enter email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-            style={inputStyle}
-          />
-
-          <input
-            type="password"
-            placeholder="Enter password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-            minLength={6}
-            style={inputStyle}
-          />
-
-          <button
-            type="submit"
-            disabled={saving}
+          <div
             style={{
-              ...buttonStyle,
-              backgroundColor: '#2563eb',
-              color: '#ffffff',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 12,
+              marginBottom: 18,
             }}
           >
-            {saving ? 'Adding...' : 'Add User'}
-          </button>
-        </form>
+            <div>
+              <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>
+                Users
+              </h2>
+              <p style={{ color: '#6b7280', fontSize: 13, marginTop: 5 }}>
+                Manage system users.
+              </p>
+            </div>
 
-        {message && (
-          <p role="status" style={{ color: '#15803d' }}>
-            {message}
-          </p>
-        )}
+            <button
+              type="button"
+              onClick={startAddUser}
+              style={{
+                ...buttonStyle,
+                background: '#0891b2',
+                color: '#fff',
+              }}
+            >
+              + Add User
+            </button>
+          </div>
 
-        {error && (
-          <p role="alert" style={{ color: '#b91c1c' }}>
-            {error}
-          </p>
-        )}
+          {userError && (
+            <div
+              style={{
+                background: '#fee2e2',
+                color: '#991b1b',
+                padding: 12,
+                borderRadius: 7,
+                marginBottom: 14,
+              }}
+            >
+              {userError}
+            </div>
+          )}
 
-        <h3 style={{ marginTop: '28px' }}>User List</h3>
+          {userMessage && (
+            <div
+              style={{
+                background: '#dcfce7',
+                color: '#166534',
+                padding: 12,
+                borderRadius: 7,
+                marginBottom: 14,
+              }}
+            >
+              {userMessage}
+            </div>
+          )}
 
-        {loading && <p>Loading users...</p>}
-        {!loading && users.length === 0 && <p>No users found.</p>}
+          {showUserForm && (
+            <form
+              onSubmit={saveUser}
+              style={{
+                background: '#f9fafb',
+                padding: 18,
+                border: '1px solid #e5e7eb',
+                borderRadius: 8,
+                marginBottom: 20,
+              }}
+            >
+              <h3 style={{ fontSize: 17, fontWeight: 700, marginTop: 0 }}>
+                {editingUserId ? 'Edit User' : 'Add New User'}
+              </h3>
 
-        <ul style={{ paddingLeft: '20px' }}>
-          {users.map((user) => (
-            <li key={user.id} style={{ marginBottom: '20px' }}>
-              {editing === user.id ? (
-                <form
-                  onSubmit={handleUpdate}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: 14,
+                }}
+              >
+                <div>
+                  <label style={labelStyle}>Name *</label>
+                  <input
+                    required
+                    style={inputStyle}
+                    value={userForm.name}
+                    onChange={(e) =>
+                      setUserForm((previous) => ({
+                        ...previous,
+                        name: e.target.value,
+                      }))
+                    }
+                    placeholder="User name"
+                  />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Email *</label>
+                  <input
+                    required
+                    type="email"
+                    style={inputStyle}
+                    value={userForm.email}
+                    onChange={(e) =>
+                      setUserForm((previous) => ({
+                        ...previous,
+                        email: e.target.value,
+                      }))
+                    }
+                    placeholder="user@example.com"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+                <button
+                  type="submit"
+                  disabled={savingUser}
                   style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px',
-                    maxWidth: '400px',
+                    ...buttonStyle,
+                    background: '#0891b2',
+                    color: '#fff',
+                    opacity: savingUser ? 0.6 : 1,
                   }}
                 >
-                  <label htmlFor={`edit-name-${user.id}`}>Name</label>
-                  <input
-                    id={`edit-name-${user.id}`}
-                    value={editName}
-                    onChange={(event) => setEditName(event.target.value)}
-                    required
-                    style={inputStyle}
-                  />
+                  {savingUser
+                    ? 'Saving...'
+                    : editingUserId
+                      ? 'Update User'
+                      : 'Save User'}
+                </button>
 
-                  <label htmlFor={`edit-email-${user.id}`}>Email</label>
-                  <input
-                    id={`edit-email-${user.id}`}
-                    type="email"
-                    value={editEmail}
-                    onChange={(event) => setEditEmail(event.target.value)}
-                    required
-                    style={inputStyle}
-                  />
+                <button
+                  type="button"
+                  onClick={() => setShowUserForm(false)}
+                  style={{
+                    ...buttonStyle,
+                    background: '#e5e7eb',
+                    color: '#374151',
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
 
-                  <button
-                    type="submit"
-                    disabled={savingEdit}
-                    style={buttonStyle}
-                  >
-                    {savingEdit ? 'Saving...' : 'Save Changes'}
-                  </button>
+          <div style={{ overflowX: 'auto' }}>
+            <table
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                fontSize: 13,
+                minWidth: 500,
+              }}
+            >
+              <thead>
+                <tr style={{ background: '#f9fafb', textAlign: 'left' }}>
+                  {['ID', 'Name', 'Email', 'Actions'].map((heading) => (
+                    <th
+                      key={heading}
+                      style={{
+                        padding: 12,
+                        borderBottom: '1px solid #e5e7eb',
+                        color: '#4b5563',
+                      }}
+                    >
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
 
-                  <button
-                    type="button"
-                    onClick={cancelEditing}
-                    style={buttonStyle}
-                  >
-                    Cancel
-                  </button>
-                </form>
-              ) : (
-                <div>
-                  <strong>{user.name}</strong>
-                  <p style={{ margin: '6px 0' }}>Email: {user.email}</p>
-                  <p style={{ margin: '6px 0' }}>ID: {user.id}</p>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={4} style={{ padding: 24, textAlign: 'center' }}>
+                      Loading users...
+                    </td>
+                  </tr>
+                ) : users.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} style={{ padding: 24, textAlign: 'center' }}>
+                      No users found.
+                    </td>
+                  </tr>
+                ) : (
+                  users.map((user) => (
+                    <tr key={user.id}>
+                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
+                        {user.id}
+                      </td>
 
-                  <button
-                    type="button"
-                    onClick={() => startEditing(user)}
-                    disabled={editing !== null || deleting !== null}
-                    style={{ ...buttonStyle, marginRight: '8px' }}
-                  >
-                    Edit User
-                  </button>
+                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
+                        {user.name}
+                      </td>
 
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(user.id)}
-                    disabled={deleting !== null || editing !== null}
-                    style={{
-                      ...buttonStyle,
-                      backgroundColor: '#dc2626',
-                      color: '#ffffff',
-                    }}
-                  >
-                    {deleting === user.id ? 'Deleting...' : 'Delete User'}
-                  </button>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      </section>
+                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
+                        {user.email}
+                      </td>
+
+                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            type="button"
+                            onClick={() => startEditUser(user)}
+                            style={{
+                              ...buttonStyle,
+                              background: '#dbeafe',
+                              color: '#1d4ed8',
+                            }}
+                          >
+                            Edit
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => void deleteUser(user)}
+                            style={{
+                              ...buttonStyle,
+                              background: '#fee2e2',
+                              color: '#b91c1c',
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <footer
+          style={{
+            textAlign: 'center',
+            color: '#9ca3af',
+            fontSize: 12,
+            padding: '24px 0 8px',
+          }}
+        >
+          IT Inventory Management System
+        </footer>
+      </div>
     </main>
   );
 }
