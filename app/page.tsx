@@ -10,6 +10,8 @@ type User = {
   id: number;
   name: string;
   email: string;
+  department?: string | null;
+  designation?: string | null;
 };
 
 type AssetStatus = 'available' | 'assigned' | 'maintenance' | 'retired';
@@ -110,6 +112,41 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong.';
 }
 
+function getAuthHeaders(): HeadersInit {
+  const token = sessionStorage.getItem('access_token');
+
+  if (!token) {
+    window.location.assign('/login');
+    throw new Error('Your session has expired. Please log in again.');
+  }
+
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+}
+
+async function getResponseError(response: Response, fallback: string) {
+  const errorData = await response.json().catch(() => null);
+
+  if (response.status === 401) {
+    sessionStorage.removeItem('access_token');
+    window.location.assign('/login');
+    return 'Your session has expired. Please log in again.';
+  }
+
+  if (response.status === 403) {
+    return 'You do not have permission to perform this action.';
+  }
+
+  if (errorData?.message) {
+    return Array.isArray(errorData.message)
+      ? errorData.message.join(', ')
+      : errorData.message;
+  }
+
+  return `${fallback} (HTTP ${response.status})`;
+}
+
 export default function DashboardPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -118,38 +155,43 @@ export default function DashboardPage() {
   const [assetSearch, setAssetSearch] = useState('');
   const [assetError, setAssetError] = useState('');
   const [assetMessage, setAssetMessage] = useState('');
-  const [userError, setUserError] = useState('');
-  const [userMessage, setUserMessage] = useState('');
 
   const [showAssetForm, setShowAssetForm] = useState(false);
   const [editingAssetId, setEditingAssetId] = useState<number | null>(null);
   const [assetForm, setAssetForm] = useState<AssetForm>(emptyAssetForm);
   const [savingAsset, setSavingAsset] = useState(false);
 
-  const [showUserForm, setShowUserForm] = useState(false);
-  const [editingUserId, setEditingUserId] = useState<number | null>(null);
-  const [userForm, setUserForm] = useState({
-    name: '',
-    email: '',
-  });
-  const [savingUser, setSavingUser] = useState(false);
+  const [assignedToSearch, setAssignedToSearch] = useState('');
+  const [showAssignedOptions, setShowAssignedOptions] = useState(false);
 
   async function refreshData() {
     setLoading(true);
     setAssetError('');
 
     try {
+      const headers = getAuthHeaders();
+
       const [assetsResponse, usersResponse] = await Promise.all([
-        fetch(`${API_URL}/assets`),
-        fetch(`${API_URL}/users`),
+        fetch(`${API_URL}/assets`, { headers }),
+        fetch(`${API_URL}/users`, { headers }),
       ]);
 
       if (!assetsResponse.ok) {
-        throw new Error('Could not load assets from backend.');
+        throw new Error(
+          await getResponseError(
+            assetsResponse,
+            'Could not load assets from backend.',
+          ),
+        );
       }
 
       if (!usersResponse.ok) {
-        throw new Error('Could not load users from backend.');
+        throw new Error(
+          await getResponseError(
+            usersResponse,
+            'Could not load employees from backend.',
+          ),
+        );
       }
 
       const assetsData = await assetsResponse.json();
@@ -178,6 +220,8 @@ export default function DashboardPage() {
   function startAddAsset() {
     setEditingAssetId(null);
     setAssetForm(emptyAssetForm);
+    setAssignedToSearch('');
+    setShowAssignedOptions(false);
     setAssetError('');
     setAssetMessage('');
     setShowAssetForm(true);
@@ -205,10 +249,51 @@ export default function DashboardPage() {
       notes: asset.notes ?? '',
     });
 
+    setAssignedToSearch(
+      asset.assignedTo
+        ? `${asset.assignedTo.name} (${asset.assignedTo.email})`
+        : '',
+    );
+
+    setShowAssignedOptions(false);
     setAssetError('');
     setAssetMessage('');
     setShowAssetForm(true);
   }
+
+  function selectAssignedUser(user: User) {
+    setAssetForm((previous) => ({
+      ...previous,
+      assignedTo: String(user.id),
+      department: user.department || '',
+    }));
+
+    setAssignedToSearch(`${user.name} (${user.email})`);
+    setShowAssignedOptions(false);
+  }
+
+  function clearAssignedUser() {
+    setAssetForm((previous) => ({
+      ...previous,
+      assignedTo: '',
+    }));
+
+    setAssignedToSearch('');
+    setShowAssignedOptions(true);
+  }
+
+  const filteredUsers = users.filter((user) => {
+    const search = assignedToSearch.trim().toLowerCase();
+
+    if (!search) return true;
+
+    return (
+      user.name.toLowerCase().includes(search) ||
+      user.email.toLowerCase().includes(search) ||
+      (user.department || '').toLowerCase().includes(search) ||
+      (user.designation || '').toLowerCase().includes(search)
+    );
+  });
 
   async function saveAsset(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -224,6 +309,8 @@ export default function DashboardPage() {
     }
 
     try {
+      const headers = getAuthHeaders();
+
       const url = editingAssetId
         ? `${API_URL}/assets/${editingAssetId}`
         : `${API_URL}/assets`;
@@ -239,20 +326,15 @@ export default function DashboardPage() {
       const response = await fetch(url, {
         method: editingAssetId ? 'PATCH' : 'POST',
         headers: {
+          ...headers,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-
         throw new Error(
-          errorData?.message
-            ? Array.isArray(errorData.message)
-              ? errorData.message.join(', ')
-              : errorData.message
-            : 'Could not save asset.',
+          await getResponseError(response, 'Could not save asset.'),
         );
       }
 
@@ -265,110 +347,14 @@ export default function DashboardPage() {
       setShowAssetForm(false);
       setEditingAssetId(null);
       setAssetForm(emptyAssetForm);
+      setAssignedToSearch('');
+      setShowAssignedOptions(false);
 
       await refreshData();
     } catch (error) {
       setAssetError(getErrorMessage(error));
     } finally {
       setSavingAsset(false);
-    }
-  }
-
-  function startAddUser() {
-    setEditingUserId(null);
-    setUserForm({ name: '', email: '' });
-    setUserError('');
-    setUserMessage('');
-    setShowUserForm(true);
-  }
-
-  function startEditUser(user: User) {
-    setEditingUserId(user.id);
-    setUserForm({
-      name: user.name,
-      email: user.email,
-    });
-    setUserError('');
-    setUserMessage('');
-    setShowUserForm(true);
-  }
-
-  async function saveUser(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSavingUser(true);
-    setUserError('');
-    setUserMessage('');
-
-    try {
-      const url = editingUserId
-        ? `${API_URL}/users/${editingUserId}`
-        : `${API_URL}/users`;
-
-      const response = await fetch(url, {
-        method: editingUserId ? 'PATCH' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userForm),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-
-        throw new Error(
-          errorData?.message
-            ? Array.isArray(errorData.message)
-              ? errorData.message.join(', ')
-              : errorData.message
-            : 'Could not save user.',
-        );
-      }
-
-      setUserMessage(
-        editingUserId
-          ? 'User updated successfully.'
-          : 'User added successfully.',
-      );
-
-      setShowUserForm(false);
-      setEditingUserId(null);
-      setUserForm({ name: '', email: '' });
-
-      await refreshData();
-    } catch (error) {
-      setUserError(getErrorMessage(error));
-    } finally {
-      setSavingUser(false);
-    }
-  }
-
-  async function deleteUser(user: User) {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete ${user.name}?`,
-    );
-
-    if (!confirmed) return;
-
-    setUserError('');
-    setUserMessage('');
-
-    try {
-      const response = await fetch(`${API_URL}/users/${user.id}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-
-        throw new Error(
-          errorData?.message || 'Could not delete user.',
-        );
-      }
-
-      setUserMessage('User deleted successfully.');
-      await refreshData();
-    } catch (error) {
-      setUserError(getErrorMessage(error));
     }
   }
 
@@ -429,11 +415,24 @@ export default function DashboardPage() {
               IT Inventory Dashboard
             </h1>
             <p style={{ color: '#6b7280', marginTop: 7 }}>
-              Manage your organization&apos;s IT assets and users.
+              Manage your organization&apos;s IT assets and employees.
             </p>
           </div>
 
           <nav style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <Link
+              href="/dashboard"
+              style={{
+                ...buttonStyle,
+                background: '#fff',
+                color: '#374151',
+                border: '1px solid #d1d5db',
+                textDecoration: 'none',
+              }}
+            >
+              Main Dashboard
+            </Link>
+
             <Link
               href="/"
               style={{
@@ -443,7 +442,7 @@ export default function DashboardPage() {
                 textDecoration: 'none',
               }}
             >
-              Dashboard
+              Asset Management
             </Link>
 
             <Link
@@ -456,7 +455,7 @@ export default function DashboardPage() {
                 textDecoration: 'none',
               }}
             >
-              Users Page
+              User Management
             </Link>
           </nav>
         </header>
@@ -534,7 +533,6 @@ export default function DashboardPage() {
           ))}
         </section>
 
-        {/* Assets section */}
         <section
           style={{
             background: '#fff',
@@ -673,7 +671,7 @@ export default function DashboardPage() {
                     style={inputStyle}
                     value={assetForm.status}
                     onChange={(e) =>
-                      updateAssetField('status', e.target.value)
+                      updateAssetField('status', e.target.value as AssetStatus)
                     }
                   >
                     <option value="available">Available</option>
@@ -683,32 +681,138 @@ export default function DashboardPage() {
                   </select>
                 </div>
 
-                <div>
-                  <label style={labelStyle}>
-                    Assigned To
-                    {assetForm.status === 'assigned' ? ' *' : ''}
-                  </label>
+                <div style={{ position: 'relative' }}>
+                  <label style={labelStyle}>Assigned To</label>
 
-                  <select
+                  <input
                     style={inputStyle}
-                    value={assetForm.assignedTo}
+                    value={assignedToSearch}
                     required={assetForm.status === 'assigned'}
-                    onChange={(e) =>
-                      updateAssetField('assignedTo', e.target.value)
-                    }
-                  >
-                    <option value="">-- Select User --</option>
+                    placeholder="Type employee name or email..."
+                    onFocus={() => setShowAssignedOptions(true)}
+                    onChange={(e) => {
+                      setAssignedToSearch(e.target.value);
 
-                    {users.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.name} ({user.email})
-                      </option>
-                    ))}
-                  </select>
+                      setAssetForm((previous) => ({
+                        ...previous,
+                        assignedTo: '',
+                      }));
+
+                      setShowAssignedOptions(true);
+                    }}
+                  />
+
+                  {assetForm.assignedTo && (
+                    <button
+                      type="button"
+                      onClick={clearAssignedUser}
+                      style={{
+                        position: 'absolute',
+                        right: 8,
+                        top: 31,
+                        border: 'none',
+                        background: '#e5e7eb',
+                        borderRadius: 5,
+                        padding: '4px 7px',
+                        cursor: 'pointer',
+                        fontSize: 11,
+                      }}
+                    >
+                      Clear
+                    </button>
+                  )}
+
+                  {showAssignedOptions && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        zIndex: 20,
+                        background: '#fff',
+                        border: '1px solid #d1d5db',
+                        borderRadius: 6,
+                        maxHeight: 220,
+                        overflowY: 'auto',
+                        boxShadow: '0 4px 10px rgba(0,0,0,0.12)',
+                      }}
+                    >
+                      {filteredUsers.length === 0 ? (
+                        <p
+                          style={{
+                            padding: 12,
+                            margin: 0,
+                            color: '#6b7280',
+                            fontSize: 13,
+                          }}
+                        >
+                          No matching employees found.
+                        </p>
+                      ) : (
+                        filteredUsers.map((user) => (
+                          <button
+                            key={user.id}
+                            type="button"
+                            onClick={() => selectAssignedUser(user)}
+                            style={{
+                              display: 'block',
+                              width: '100%',
+                              padding: '10px 12px',
+                              border: 'none',
+                              borderBottom: '1px solid #f3f4f6',
+                              background:
+                                assetForm.assignedTo === String(user.id)
+                                  ? '#eff6ff'
+                                  : '#fff',
+                              textAlign: 'left',
+                              cursor: 'pointer',
+                              color: '#111827',
+                            }}
+                          >
+                            <span
+                              style={{
+                                display: 'block',
+                                fontSize: 13,
+                                fontWeight: 600,
+                              }}
+                            >
+                              {user.name}
+                            </span>
+
+                            <span
+                              style={{
+                                display: 'block',
+                                fontSize: 11,
+                                color: '#6b7280',
+                                marginTop: 3,
+                              }}
+                            >
+                              {user.email}
+                              {user.department ? ` • ${user.department}` : ''}
+                              {user.designation ? ` • ${user.designation}` : ''}
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
 
                   {users.length === 0 && (
                     <p style={{ color: '#b91c1c', fontSize: 12 }}>
-                      No users found. Add a user first.
+                      No users found. Add an employee first.
+                    </p>
+                  )}
+
+                  {assetForm.assignedTo && (
+                    <p
+                      style={{
+                        color: '#166534',
+                        fontSize: 11,
+                        marginTop: 5,
+                      }}
+                    >
+                      Employee selected.
                     </p>
                   )}
                 </div>
@@ -723,6 +827,16 @@ export default function DashboardPage() {
                     }
                     placeholder="Department"
                   />
+                  <p
+                    style={{
+                      color: '#6b7280',
+                      fontSize: 11,
+                      marginTop: 4,
+                    }}
+                  >
+                    Automatically filled when you select an employee. You can
+                    change it manually.
+                  </p>
                 </div>
 
                 <div>
@@ -780,7 +894,10 @@ export default function DashboardPage() {
 
                 <button
                   type="button"
-                  onClick={() => setShowAssetForm(false)}
+                  onClick={() => {
+                    setShowAssetForm(false);
+                    setShowAssignedOptions(false);
+                  }}
                   style={{
                     ...buttonStyle,
                     background: '#e5e7eb',
@@ -906,253 +1023,6 @@ export default function DashboardPage() {
                         >
                           Edit
                         </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {/* Users section */}
-        <section
-          style={{
-            background: '#fff',
-            borderRadius: 10,
-            padding: 20,
-            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: 12,
-              marginBottom: 18,
-            }}
-          >
-            <div>
-              <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>
-                Users
-              </h2>
-              <p style={{ color: '#6b7280', fontSize: 13, marginTop: 5 }}>
-                Manage system users.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={startAddUser}
-              style={{
-                ...buttonStyle,
-                background: '#0891b2',
-                color: '#fff',
-              }}
-            >
-              + Add User
-            </button>
-          </div>
-
-          {userError && (
-            <div
-              style={{
-                background: '#fee2e2',
-                color: '#991b1b',
-                padding: 12,
-                borderRadius: 7,
-                marginBottom: 14,
-              }}
-            >
-              {userError}
-            </div>
-          )}
-
-          {userMessage && (
-            <div
-              style={{
-                background: '#dcfce7',
-                color: '#166534',
-                padding: 12,
-                borderRadius: 7,
-                marginBottom: 14,
-              }}
-            >
-              {userMessage}
-            </div>
-          )}
-
-          {showUserForm && (
-            <form
-              onSubmit={saveUser}
-              style={{
-                background: '#f9fafb',
-                padding: 18,
-                border: '1px solid #e5e7eb',
-                borderRadius: 8,
-                marginBottom: 20,
-              }}
-            >
-              <h3 style={{ fontSize: 17, fontWeight: 700, marginTop: 0 }}>
-                {editingUserId ? 'Edit User' : 'Add New User'}
-              </h3>
-
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                  gap: 14,
-                }}
-              >
-                <div>
-                  <label style={labelStyle}>Name *</label>
-                  <input
-                    required
-                    style={inputStyle}
-                    value={userForm.name}
-                    onChange={(e) =>
-                      setUserForm((previous) => ({
-                        ...previous,
-                        name: e.target.value,
-                      }))
-                    }
-                    placeholder="User name"
-                  />
-                </div>
-
-                <div>
-                  <label style={labelStyle}>Email *</label>
-                  <input
-                    required
-                    type="email"
-                    style={inputStyle}
-                    value={userForm.email}
-                    onChange={(e) =>
-                      setUserForm((previous) => ({
-                        ...previous,
-                        email: e.target.value,
-                      }))
-                    }
-                    placeholder="user@example.com"
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-                <button
-                  type="submit"
-                  disabled={savingUser}
-                  style={{
-                    ...buttonStyle,
-                    background: '#0891b2',
-                    color: '#fff',
-                    opacity: savingUser ? 0.6 : 1,
-                  }}
-                >
-                  {savingUser
-                    ? 'Saving...'
-                    : editingUserId
-                      ? 'Update User'
-                      : 'Save User'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowUserForm(false)}
-                  style={{
-                    ...buttonStyle,
-                    background: '#e5e7eb',
-                    color: '#374151',
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          )}
-
-          <div style={{ overflowX: 'auto' }}>
-            <table
-              style={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                fontSize: 13,
-                minWidth: 500,
-              }}
-            >
-              <thead>
-                <tr style={{ background: '#f9fafb', textAlign: 'left' }}>
-                  {['ID', 'Name', 'Email', 'Actions'].map((heading) => (
-                    <th
-                      key={heading}
-                      style={{
-                        padding: 12,
-                        borderBottom: '1px solid #e5e7eb',
-                        color: '#4b5563',
-                      }}
-                    >
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={4} style={{ padding: 24, textAlign: 'center' }}>
-                      Loading users...
-                    </td>
-                  </tr>
-                ) : users.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} style={{ padding: 24, textAlign: 'center' }}>
-                      No users found.
-                    </td>
-                  </tr>
-                ) : (
-                  users.map((user) => (
-                    <tr key={user.id}>
-                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
-                        {user.id}
-                      </td>
-
-                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
-                        {user.name}
-                      </td>
-
-                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
-                        {user.email}
-                      </td>
-
-                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <button
-                            type="button"
-                            onClick={() => startEditUser(user)}
-                            style={{
-                              ...buttonStyle,
-                              background: '#dbeafe',
-                              color: '#1d4ed8',
-                            }}
-                          >
-                            Edit
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => void deleteUser(user)}
-                            style={{
-                              ...buttonStyle,
-                              background: '#fee2e2',
-                              color: '#b91c1c',
-                            }}
-                          >
-                            Delete
-                          </button>
-                        </div>
                       </td>
                     </tr>
                   ))

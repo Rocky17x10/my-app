@@ -4,6 +4,8 @@
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 
+type UserRole = 'super_admin' | 'admin' | 'user';
+
 export default function LoginPage() {
   const router = useRouter();
 
@@ -19,7 +21,7 @@ export default function LoginPage() {
     setError('');
 
     try {
-      // Step 1: Send login credentials to the NestJS backend.
+      // Step 1: Send login credentials to the backend.
       const loginResponse = await fetch(
         'http://localhost:3001/auth/login',
         {
@@ -45,10 +47,12 @@ export default function LoginPage() {
       const token: string = loginData.access_token;
 
       if (!token) {
-        throw new Error('The backend did not return an access token.');
+        throw new Error(
+          'The backend did not return an access token.',
+        );
       }
 
-      // Step 3: Verify the token by requesting the protected profile.
+      // Step 3: Verify the token and get the current user role.
       const profileResponse = await fetch(
         'http://localhost:3001/auth/profile',
         {
@@ -58,15 +62,35 @@ export default function LoginPage() {
         },
       );
 
+      const profileData = await profileResponse.json();
+
       if (!profileResponse.ok) {
-        throw new Error('Login succeeded, but profile access failed.');
+        throw new Error(
+          'Login succeeded, but profile access failed.',
+        );
+      }
+
+      const role = profileData.user?.role as UserRole | undefined;
+
+      if (
+        role !== 'super_admin' &&
+        role !== 'admin' &&
+        role !== 'user'
+      ) {
+        throw new Error(
+          'Your account has an invalid or missing role.',
+        );
       }
 
       // Step 4: Save the token for this browser tab's session.
       sessionStorage.setItem('access_token', token);
 
-      // Step 5: Redirect to the dashboard.
-      router.push('/dashboard');
+      // Step 5: Redirect according to account role.
+      if (role === 'super_admin' || role === 'admin') {
+        router.push('/dashboard');
+      } else {
+        router.push('/my-assets');
+      }
     } catch (err) {
       sessionStorage.removeItem('access_token');
 
@@ -103,6 +127,7 @@ export default function LoginPage() {
         }}
       >
         <label htmlFor="email">Email</label>
+
         <input
           id="email"
           type="email"
@@ -115,6 +140,7 @@ export default function LoginPage() {
         />
 
         <label htmlFor="password">Password</label>
+
         <input
           id="password"
           type="password"
