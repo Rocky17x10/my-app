@@ -35,6 +35,7 @@ export default function MyAssetsPage() {
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -287,9 +288,11 @@ export default function MyAssetsPage() {
                 {filteredAssets.map((asset) => (
                   <tr
                     key={asset.id}
-                    className="border-b hover:bg-gray-50"
+                    onClick={() => setSelectedAsset(asset)}
+                    className="border-b hover:bg-blue-50 cursor-pointer"
+                    title="Click to view asset details"
                   >
-                    <td className="p-3 font-medium text-gray-800">
+                    <td className="p-3 font-medium text-blue-700">
                       {asset.assetTag}
                     </td>
                     <td className="p-3 text-gray-800">
@@ -341,6 +344,111 @@ export default function MyAssetsPage() {
           </div>
         </div>
       </main>
+
+      {selectedAsset && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+          onClick={() => setSelectedAsset(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center border-b p-5">
+              <div>
+                <h2 className="text-xl font-bold text-gray-800">
+                  Asset Details
+                </h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {selectedAsset.assetTag}
+                </p>
+              </div>
+
+              <button
+                onClick={() => setSelectedAsset(null)}
+                className="text-gray-500 hover:text-gray-800 text-2xl"
+                aria-label="Close asset details"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h3 className="text-2xl font-semibold text-gray-800">
+                    {selectedAsset.name}
+                  </h3>
+                  <p className="text-gray-500 mt-1">
+                    {selectedAsset.category}
+                  </p>
+                </div>
+
+                <span
+                  className={`px-3 py-2 rounded-full text-sm font-medium capitalize ${getStatusStyle(
+                    selectedAsset.status
+                  )}`}
+                >
+                  {selectedAsset.status}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <Detail label="Asset Tag" value={selectedAsset.assetTag} />
+                <Detail label="Category" value={selectedAsset.category} />
+                <Detail label="Brand" value={selectedAsset.brand} />
+                <Detail label="Model" value={selectedAsset.model} />
+                <Detail label="Serial Number" value={selectedAsset.serialNumber} />
+                <Detail label="Department" value={selectedAsset.department} />
+                <Detail label="Location" value={selectedAsset.location} />
+                <Detail
+                  label="Purchase Date"
+                  value={
+                    selectedAsset.purchaseDate
+                      ? selectedAsset.purchaseDate.slice(0, 10)
+                      : undefined
+                  }
+                />
+              </div>
+
+              <div className="mt-6 border-t pt-5">
+                <p className="text-sm font-medium text-gray-500 mb-2">
+                  Notes
+                </p>
+                <p className="text-gray-800 whitespace-pre-wrap">
+                  {selectedAsset.notes || "No additional notes."}
+                </p>
+              </div>
+            </div>
+
+            <div className="border-t p-5 flex justify-end">
+              <button
+                onClick={() => setSelectedAsset(null)}
+                className="bg-gray-800 hover:bg-gray-900 text-white px-5 py-2 rounded-lg"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Detail({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string;
+}) {
+  return (
+    <div>
+      <p className="text-sm text-gray-500">{label}</p>
+      <p className="font-medium text-gray-800 mt-1">
+        {value || "-"}
+      </p>
     </div>
   );
 }
