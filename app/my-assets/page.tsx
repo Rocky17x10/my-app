@@ -50,14 +50,11 @@ export default function MyAssetsPage() {
       }
 
       try {
-        const profileResponse = await fetch(
-          `${API_URL}/auth/profile`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
+        const profileResponse = await fetch(`${API_URL}/auth/profile`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
 
         if (!profileResponse.ok) {
           if (profileResponse.status === 401) {
@@ -82,14 +79,11 @@ export default function MyAssetsPage() {
 
         setProfile(currentUser);
 
-        const assetsResponse = await fetch(
-          `${API_URL}/assets`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
+        const assetsResponse = await fetch(`${API_URL}/assets`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
 
         if (!assetsResponse.ok) {
           if (assetsResponse.status === 401) {
@@ -105,9 +99,7 @@ export default function MyAssetsPage() {
         setAssets(assetsData);
       } catch (err) {
         setError(
-          err instanceof Error
-            ? err.message
-            : "Something went wrong."
+          err instanceof Error ? err.message : "Something went wrong."
         );
       } finally {
         setLoading(false);
@@ -135,9 +127,7 @@ export default function MyAssetsPage() {
         asset.location,
       ]
         .filter(Boolean)
-        .some((value) =>
-          String(value).toLowerCase().includes(query)
-        )
+        .some((value) => String(value).toLowerCase().includes(query))
     );
   }, [assets, search]);
 
@@ -184,7 +174,7 @@ export default function MyAssetsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap justify-between items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">
               My Assets
@@ -194,12 +184,28 @@ export default function MyAssetsPage() {
             </p>
           </div>
 
-          <button
-            onClick={logout}
-            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg"
-          >
-            Logout
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => router.push("/my-assets")}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+            >
+              My Assets
+            </button>
+
+            <button
+              onClick={() => router.push("/my-requests")}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg"
+            >
+              My Requests
+            </button>
+
+            <button
+              onClick={logout}
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg"
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 
@@ -295,16 +301,10 @@ export default function MyAssetsPage() {
                     <td className="p-3 font-medium text-blue-700">
                       {asset.assetTag}
                     </td>
-                    <td className="p-3 text-gray-800">
-                      {asset.name}
-                    </td>
+                    <td className="p-3 text-gray-800">{asset.name}</td>
+                    <td className="p-3 text-gray-600">{asset.category}</td>
                     <td className="p-3 text-gray-600">
-                      {asset.category}
-                    </td>
-                    <td className="p-3 text-gray-600">
-                      {[asset.brand, asset.model]
-                        .filter(Boolean)
-                        .join(" / ") || "-"}
+                      {[asset.brand, asset.model].filter(Boolean).join(" / ") || "-"}
                     </td>
                     <td className="p-3 text-gray-600">
                       {asset.serialNumber || "-"}
