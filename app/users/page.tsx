@@ -122,8 +122,11 @@ export default function UsersPage() {
       const profileData = await profileResponse.json();
 
       setUsers(Array.isArray(usersData) ? usersData : []);
-      setCurrentRole(profileData.role);
-      setCurrentUserId(profileData.id);
+
+      const profileUser = profileData.user || profileData;
+
+      setCurrentRole(profileUser.role || null);
+      setCurrentUserId(profileUser.id || profileUser.userId || null);
     } catch (err) {
       setError(
         err instanceof Error
@@ -523,7 +526,7 @@ export default function UsersPage() {
             <p className="py-6 text-gray-500">No employees found.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1100px] text-left text-sm">
+              <table className="w-full min-w-[1250px] text-left text-sm">
                 <thead>
                   <tr className="border-b bg-gray-50 text-gray-600">
                     <th className="p-3">ID</th>
@@ -532,6 +535,7 @@ export default function UsersPage() {
                     <th className="p-3">Department</th>
                     <th className="p-3">Designation</th>
                     <th className="p-3">Role</th>
+                    <th className="p-3">Assignment History</th>
                     <th className="p-3">Actions</th>
                   </tr>
                 </thead>
@@ -588,6 +592,15 @@ export default function UsersPage() {
                                 <option value="admin">Admin</option>
                               </select>
                             )}
+                        </td>
+
+                        <td className="p-3">
+                          <Link
+                            href={`/users/${user.id}/history`}
+                            className="inline-block whitespace-nowrap rounded-md bg-purple-100 px-3 py-2 text-xs font-semibold text-purple-800 hover:bg-purple-200"
+                          >
+                            View History
+                          </Link>
                         </td>
 
                         <td className="p-3">

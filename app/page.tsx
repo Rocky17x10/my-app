@@ -12,6 +12,7 @@ type User = {
   email: string;
   department?: string | null;
   designation?: string | null;
+  role?: string;
 };
 
 type AssetStatus = 'available' | 'assigned' | 'maintenance' | 'retired';
@@ -40,7 +41,6 @@ type AssetForm = {
   model: string;
   serialNumber: string;
   status: AssetStatus;
-  assignedTo: string;
   department: string;
   location: string;
   purchaseDate: string;
@@ -55,7 +55,6 @@ const emptyAssetForm: AssetForm = {
   model: '',
   serialNumber: '',
   status: 'available',
-  assignedTo: '',
   department: '',
   location: '',
   purchaseDate: '',
@@ -90,7 +89,10 @@ const buttonStyle: React.CSSProperties = {
 };
 
 const statusStyle = (status: AssetStatus): React.CSSProperties => {
-  const colors: Record<AssetStatus, { background: string; color: string }> = {
+  const colors: Record<
+    AssetStatus,
+    { background: string; color: string }
+  > = {
     available: { background: '#dcfce7', color: '#166534' },
     assigned: { background: '#dbeafe', color: '#1d4ed8' },
     maintenance: { background: '#fef3c7', color: '#92400e' },
@@ -112,7 +114,7 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong.';
 }
 
-function getAuthHeaders(): HeadersInit {
+function getAuthHeaders(): Record<string, string> {
   const token = sessionStorage.getItem('access_token');
 
   if (!token) {
@@ -125,7 +127,10 @@ function getAuthHeaders(): HeadersInit {
   };
 }
 
-async function getResponseError(response: Response, fallback: string) {
+async function getResponseError(
+  response: Response,
+  fallback: string,
+): Promise<string> {
   const errorData = await response.json().catch(() => null);
 
   if (response.status === 401) {
@@ -150,6 +155,7 @@ async function getResponseError(response: Response, fallback: string) {
 export default function DashboardPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [currentRole, setCurrentRole] = useState('');
   const [loading, setLoading] = useState(true);
 
   const [assetSearch, setAssetSearch] = useState('');
@@ -158,12 +164,24 @@ export default function DashboardPage() {
 
   const [showAssetForm, setShowAssetForm] = useState(false);
   const [editingAssetId, setEditingAssetId] = useState<number | null>(null);
-  const [assetForm, setAssetForm] = useState<AssetForm>(emptyAssetForm);
+  const [editingAssetHasAssignee, setEditingAssetHasAssignee] =
+    useState(false);
+
+  const [assetForm, setAssetForm] =
+    useState<AssetForm>(emptyAssetForm);
+
   const [savingAsset, setSavingAsset] = useState(false);
 
-  const [assignedToSearch, setAssignedToSearch] = useState('');
-  const [showAssignedOptions, setShowAssignedOptions] = useState(false);
+  // Assignment modal state
+  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+  const [employeeSearch, setEmployeeSearch] = useState('');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [savingAssignment, setSavingAssignment] = useState(false);
 
+  const canManageAssets =
+    currentRole === 'admin' || currentRole === 'super_admin';
+
+  // Load profile, assets and employee list.
   async function refreshData() {
     setLoading(true);
     setAssetError('');
@@ -171,10 +189,19 @@ export default function DashboardPage() {
     try {
       const headers = getAuthHeaders();
 
-      const [assetsResponse, usersResponse] = await Promise.all([
+      const [profileResponse, assetsResponse] = await Promise.all([
+        fetch(`${API_URL}/auth/profile`, { headers }),
         fetch(`${API_URL}/assets`, { headers }),
-        fetch(`${API_URL}/users`, { headers }),
       ]);
+
+      if (!profileResponse.ok) {
+        throw new Error(
+          await getResponseError(
+            profileResponse,
+            'Could not load your profile.',
+          ),
+        );
+      }
 
       if (!assetsResponse.ok) {
         throw new Error(
@@ -185,20 +212,37 @@ export default function DashboardPage() {
         );
       }
 
-      if (!usersResponse.ok) {
-        throw new Error(
-          await getResponseError(
-            usersResponse,
-            'Could not load employees from backend.',
-          ),
-        );
-      }
-
+      const profileData = await profileResponse.json();
       const assetsData = await assetsResponse.json();
-      const usersData = await usersResponse.json();
 
+      const role =
+        profileData.user?.role ||
+        profileData.role ||
+        '';
+
+      setCurrentRole(role);
       setAssets(Array.isArray(assetsData) ? assetsData : []);
-      setUsers(Array.isArray(usersData) ? usersData : []);
+
+      // Only administrators need the employee list.
+      if (role === 'admin' || role === 'super_admin') {
+        const usersResponse = await fetch(`${API_URL}/users`, {
+          headers,
+        });
+
+        if (!usersResponse.ok) {
+          throw new Error(
+            await getResponseError(
+              usersResponse,
+              'Could not load employees from backend.',
+            ),
+          );
+        }
+
+        const usersData = await usersResponse.json();
+        setUsers(Array.isArray(usersData) ? usersData : []);
+      } else {
+        setUsers([]);
+      }
     } catch (error) {
       setAssetError(getErrorMessage(error));
     } finally {
@@ -210,7 +254,10 @@ export default function DashboardPage() {
     void refreshData();
   }, []);
 
-  function updateAssetField(field: keyof AssetForm, value: string) {
+  function updateAssetField(
+    field: keyof AssetForm,
+    value: string,
+  ) {
     setAssetForm((previous) => ({
       ...previous,
       [field]: value,
@@ -219,9 +266,8 @@ export default function DashboardPage() {
 
   function startAddAsset() {
     setEditingAssetId(null);
+    setEditingAssetHasAssignee(false);
     setAssetForm(emptyAssetForm);
-    setAssignedToSearch('');
-    setShowAssignedOptions(false);
     setAssetError('');
     setAssetMessage('');
     setShowAssetForm(true);
@@ -229,6 +275,7 @@ export default function DashboardPage() {
 
   function startEditAsset(asset: Asset) {
     setEditingAssetId(asset.id);
+    setEditingAssetHasAssignee(Boolean(asset.assignedTo));
 
     setAssetForm({
       assetTag: asset.assetTag ?? '',
@@ -238,9 +285,6 @@ export default function DashboardPage() {
       model: asset.model ?? '',
       serialNumber: asset.serialNumber ?? '',
       status: asset.status ?? 'available',
-      assignedTo: asset.assignedTo
-        ? String(asset.assignedTo.id)
-        : '',
       department: asset.department ?? '',
       location: asset.location ?? '',
       purchaseDate: asset.purchaseDate
@@ -249,51 +293,10 @@ export default function DashboardPage() {
       notes: asset.notes ?? '',
     });
 
-    setAssignedToSearch(
-      asset.assignedTo
-        ? `${asset.assignedTo.name} (${asset.assignedTo.email})`
-        : '',
-    );
-
-    setShowAssignedOptions(false);
     setAssetError('');
     setAssetMessage('');
     setShowAssetForm(true);
   }
-
-  function selectAssignedUser(user: User) {
-    setAssetForm((previous) => ({
-      ...previous,
-      assignedTo: String(user.id),
-      department: user.department || '',
-    }));
-
-    setAssignedToSearch(`${user.name} (${user.email})`);
-    setShowAssignedOptions(false);
-  }
-
-  function clearAssignedUser() {
-    setAssetForm((previous) => ({
-      ...previous,
-      assignedTo: '',
-    }));
-
-    setAssignedToSearch('');
-    setShowAssignedOptions(true);
-  }
-
-  const filteredUsers = users.filter((user) => {
-    const search = assignedToSearch.trim().toLowerCase();
-
-    if (!search) return true;
-
-    return (
-      user.name.toLowerCase().includes(search) ||
-      user.email.toLowerCase().includes(search) ||
-      (user.department || '').toLowerCase().includes(search) ||
-      (user.designation || '').toLowerCase().includes(search)
-    );
-  });
 
   async function saveAsset(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -301,12 +304,6 @@ export default function DashboardPage() {
     setSavingAsset(true);
     setAssetError('');
     setAssetMessage('');
-
-    if (assetForm.status === 'assigned' && !assetForm.assignedTo) {
-      setAssetError('Please select a user before assigning this asset.');
-      setSavingAsset(false);
-      return;
-    }
 
     try {
       const headers = getAuthHeaders();
@@ -317,9 +314,6 @@ export default function DashboardPage() {
 
       const payload = {
         ...assetForm,
-        assignedTo: assetForm.assignedTo
-          ? Number(assetForm.assignedTo)
-          : null,
         purchaseDate: assetForm.purchaseDate || null,
       };
 
@@ -338,19 +332,20 @@ export default function DashboardPage() {
         );
       }
 
-      setAssetMessage(
-        editingAssetId
-          ? 'Asset updated successfully.'
-          : 'Asset added successfully.',
-      );
+      const wasEditing = editingAssetId !== null;
 
       setShowAssetForm(false);
       setEditingAssetId(null);
+      setEditingAssetHasAssignee(false);
       setAssetForm(emptyAssetForm);
-      setAssignedToSearch('');
-      setShowAssignedOptions(false);
 
       await refreshData();
+
+      setAssetMessage(
+        wasEditing
+          ? 'Asset updated successfully.'
+          : 'Asset added successfully.',
+      );
     } catch (error) {
       setAssetError(getErrorMessage(error));
     } finally {
@@ -358,8 +353,128 @@ export default function DashboardPage() {
     }
   }
 
+  // Open assignment modal.
+  function openAssignModal(asset: Asset) {
+    setSelectedAsset(asset);
+    setEmployeeSearch('');
+    setSelectedEmployeeId('');
+    setAssetError('');
+    setAssetMessage('');
+  }
+
+  function closeAssignModal() {
+    if (savingAssignment) return;
+
+    setSelectedAsset(null);
+    setEmployeeSearch('');
+    setSelectedEmployeeId('');
+  }
+
+  // Assign an asset using the dedicated backend API.
+  async function assignAsset() {
+    if (!selectedAsset || !selectedEmployeeId) {
+      setAssetError('Please select an employee.');
+      return;
+    }
+
+    setSavingAssignment(true);
+    setAssetError('');
+    setAssetMessage('');
+
+    try {
+      const headers = getAuthHeaders();
+
+      const response = await fetch(
+        `${API_URL}/assets/${selectedAsset.id}/assign`,
+        {
+          method: 'POST',
+          headers: {
+            ...headers,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId: Number(selectedEmployeeId),
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          await getResponseError(response, 'Could not assign asset.'),
+        );
+      }
+
+      const assetName = selectedAsset.name;
+
+      setSelectedAsset(null);
+      setEmployeeSearch('');
+      setSelectedEmployeeId('');
+
+      await refreshData();
+
+      setAssetMessage(`${assetName} assigned successfully.`);
+    } catch (error) {
+      setAssetError(getErrorMessage(error));
+    } finally {
+      setSavingAssignment(false);
+    }
+  }
+
+  // Unassign an asset using the dedicated backend API.
+  async function unassignAsset(asset: Asset) {
+    const confirmed = window.confirm(
+      `Are you sure you want to unassign "${asset.name}" from ${
+        asset.assignedTo?.name || 'the current employee'
+      }?`,
+    );
+
+    if (!confirmed) return;
+
+    setAssetError('');
+    setAssetMessage('');
+
+    try {
+      const headers = getAuthHeaders();
+
+      const response = await fetch(
+        `${API_URL}/assets/${asset.id}/unassign`,
+        {
+          method: 'PATCH',
+          headers,
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          await getResponseError(response, 'Could not unassign asset.'),
+        );
+      }
+
+      await refreshData();
+
+      setAssetMessage(`${asset.name} unassigned successfully.`);
+    } catch (error) {
+      setAssetError(getErrorMessage(error));
+    }
+  }
+
+  // Employee search.
+  const filteredUsers = users.filter((user) => {
+    const search = employeeSearch.trim().toLowerCase();
+
+    if (!search) return true;
+
+    return (
+      user.name.toLowerCase().includes(search) ||
+      user.email.toLowerCase().includes(search) ||
+      (user.department || '').toLowerCase().includes(search) ||
+      (user.designation || '').toLowerCase().includes(search)
+    );
+  });
+
+  // Asset search.
   const filteredAssets = assets.filter((asset) => {
-    const search = assetSearch.toLowerCase();
+    const search = assetSearch.trim().toLowerCase();
 
     return [
       asset.assetTag,
@@ -390,6 +505,10 @@ export default function DashboardPage() {
     (asset) => asset.status === 'maintenance',
   ).length;
 
+  const retiredCount = assets.filter(
+    (asset) => asset.status === 'retired',
+  ).length;
+
   return (
     <main
       style={{
@@ -400,6 +519,7 @@ export default function DashboardPage() {
       }}
     >
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+        {/* Header */}
         <header
           style={{
             display: 'flex',
@@ -414,6 +534,7 @@ export default function DashboardPage() {
             <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0 }}>
               IT Inventory Dashboard
             </h1>
+
             <p style={{ color: '#6b7280', marginTop: 7 }}>
               Manage your organization&apos;s IT assets and employees.
             </p>
@@ -445,21 +566,24 @@ export default function DashboardPage() {
               Asset Management
             </Link>
 
-            <Link
-              href="/users"
-              style={{
-                ...buttonStyle,
-                background: '#fff',
-                color: '#374151',
-                border: '1px solid #d1d5db',
-                textDecoration: 'none',
-              }}
-            >
-              User Management
-            </Link>
+            {canManageAssets && (
+              <Link
+                href="/users"
+                style={{
+                  ...buttonStyle,
+                  background: '#fff',
+                  color: '#374151',
+                  border: '1px solid #d1d5db',
+                  textDecoration: 'none',
+                }}
+              >
+                User Management
+              </Link>
+            )}
           </nav>
         </header>
 
+        {/* Messages */}
         {assetError && (
           <div
             style={{
@@ -488,6 +612,7 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* Summary cards */}
         <section
           style={{
             display: 'grid',
@@ -505,7 +630,16 @@ export default function DashboardPage() {
               value: maintenanceCount,
               color: '#d97706',
             },
-            { label: 'Total Users', value: users.length, color: '#0891b2' },
+            { label: 'Retired', value: retiredCount, color: '#dc2626' },
+            ...(canManageAssets
+              ? [
+                  {
+                    label: 'Total Users',
+                    value: users.length,
+                    color: '#0891b2',
+                  },
+                ]
+              : []),
           ].map((item) => (
             <div
               key={item.label}
@@ -520,6 +654,7 @@ export default function DashboardPage() {
               <p style={{ color: '#6b7280', fontSize: 13, margin: 0 }}>
                 {item.label}
               </p>
+
               <p
                 style={{
                   fontSize: 30,
@@ -533,6 +668,7 @@ export default function DashboardPage() {
           ))}
         </section>
 
+        {/* Assets section */}
         <section
           style={{
             background: '#fff',
@@ -556,25 +692,29 @@ export default function DashboardPage() {
               <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>
                 IT Assets
               </h2>
+
               <p style={{ color: '#6b7280', fontSize: 13, marginTop: 5 }}>
-                View, add, and update inventory assets.
+                View and manage inventory assets and assignments.
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={startAddAsset}
-              style={{
-                ...buttonStyle,
-                background: '#2563eb',
-                color: '#fff',
-              }}
-            >
-              + Add Asset
-            </button>
+            {canManageAssets && (
+              <button
+                type="button"
+                onClick={startAddAsset}
+                style={{
+                  ...buttonStyle,
+                  background: '#2563eb',
+                  color: '#fff',
+                }}
+              >
+                + Add Asset
+              </button>
+            )}
           </div>
 
-          {showAssetForm && (
+          {/* Add / Edit asset form */}
+          {showAssetForm && canManageAssets && (
             <form
               onSubmit={saveAsset}
               style={{
@@ -615,7 +755,9 @@ export default function DashboardPage() {
                     required
                     style={inputStyle}
                     value={assetForm.name}
-                    onChange={(e) => updateAssetField('name', e.target.value)}
+                    onChange={(e) =>
+                      updateAssetField('name', e.target.value)
+                    }
                     placeholder="e.g. Laptop"
                   />
                 </div>
@@ -638,7 +780,9 @@ export default function DashboardPage() {
                   <input
                     style={inputStyle}
                     value={assetForm.brand}
-                    onChange={(e) => updateAssetField('brand', e.target.value)}
+                    onChange={(e) =>
+                      updateAssetField('brand', e.target.value)
+                    }
                     placeholder="e.g. Dell"
                   />
                 </div>
@@ -648,7 +792,9 @@ export default function DashboardPage() {
                   <input
                     style={inputStyle}
                     value={assetForm.model}
-                    onChange={(e) => updateAssetField('model', e.target.value)}
+                    onChange={(e) =>
+                      updateAssetField('model', e.target.value)
+                    }
                     placeholder="Model"
                   />
                 </div>
@@ -668,10 +814,19 @@ export default function DashboardPage() {
                 <div>
                   <label style={labelStyle}>Status *</label>
                   <select
-                    style={inputStyle}
+                    style={{
+                      ...inputStyle,
+                      background: editingAssetHasAssignee
+                        ? '#f3f4f6'
+                        : '#fff',
+                    }}
                     value={assetForm.status}
+                    disabled={editingAssetHasAssignee}
                     onChange={(e) =>
-                      updateAssetField('status', e.target.value as AssetStatus)
+                      updateAssetField(
+                        'status',
+                        e.target.value as AssetStatus,
+                      )
                     }
                   >
                     <option value="available">Available</option>
@@ -679,140 +834,17 @@ export default function DashboardPage() {
                     <option value="maintenance">Maintenance</option>
                     <option value="retired">Retired</option>
                   </select>
-                </div>
 
-                <div style={{ position: 'relative' }}>
-                  <label style={labelStyle}>Assigned To</label>
-
-                  <input
-                    style={inputStyle}
-                    value={assignedToSearch}
-                    required={assetForm.status === 'assigned'}
-                    placeholder="Type employee name or email..."
-                    onFocus={() => setShowAssignedOptions(true)}
-                    onChange={(e) => {
-                      setAssignedToSearch(e.target.value);
-
-                      setAssetForm((previous) => ({
-                        ...previous,
-                        assignedTo: '',
-                      }));
-
-                      setShowAssignedOptions(true);
-                    }}
-                  />
-
-                  {assetForm.assignedTo && (
-                    <button
-                      type="button"
-                      onClick={clearAssignedUser}
-                      style={{
-                        position: 'absolute',
-                        right: 8,
-                        top: 31,
-                        border: 'none',
-                        background: '#e5e7eb',
-                        borderRadius: 5,
-                        padding: '4px 7px',
-                        cursor: 'pointer',
-                        fontSize: 11,
-                      }}
-                    >
-                      Clear
-                    </button>
-                  )}
-
-                  {showAssignedOptions && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        right: 0,
-                        zIndex: 20,
-                        background: '#fff',
-                        border: '1px solid #d1d5db',
-                        borderRadius: 6,
-                        maxHeight: 220,
-                        overflowY: 'auto',
-                        boxShadow: '0 4px 10px rgba(0,0,0,0.12)',
-                      }}
-                    >
-                      {filteredUsers.length === 0 ? (
-                        <p
-                          style={{
-                            padding: 12,
-                            margin: 0,
-                            color: '#6b7280',
-                            fontSize: 13,
-                          }}
-                        >
-                          No matching employees found.
-                        </p>
-                      ) : (
-                        filteredUsers.map((user) => (
-                          <button
-                            key={user.id}
-                            type="button"
-                            onClick={() => selectAssignedUser(user)}
-                            style={{
-                              display: 'block',
-                              width: '100%',
-                              padding: '10px 12px',
-                              border: 'none',
-                              borderBottom: '1px solid #f3f4f6',
-                              background:
-                                assetForm.assignedTo === String(user.id)
-                                  ? '#eff6ff'
-                                  : '#fff',
-                              textAlign: 'left',
-                              cursor: 'pointer',
-                              color: '#111827',
-                            }}
-                          >
-                            <span
-                              style={{
-                                display: 'block',
-                                fontSize: 13,
-                                fontWeight: 600,
-                              }}
-                            >
-                              {user.name}
-                            </span>
-
-                            <span
-                              style={{
-                                display: 'block',
-                                fontSize: 11,
-                                color: '#6b7280',
-                                marginTop: 3,
-                              }}
-                            >
-                              {user.email}
-                              {user.department ? ` • ${user.department}` : ''}
-                              {user.designation ? ` • ${user.designation}` : ''}
-                            </span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  )}
-
-                  {users.length === 0 && (
-                    <p style={{ color: '#b91c1c', fontSize: 12 }}>
-                      No users found. Add an employee first.
-                    </p>
-                  )}
-
-                  {assetForm.assignedTo && (
+                  {editingAssetHasAssignee && (
                     <p
                       style={{
-                        color: '#166534',
+                        color: '#6b7280',
                         fontSize: 11,
                         marginTop: 5,
                       }}
                     >
-                      Employee selected.
+                      This asset has an assigned employee. Use the
+                      assignment controls to change its assignment.
                     </p>
                   )}
                 </div>
@@ -827,16 +859,6 @@ export default function DashboardPage() {
                     }
                     placeholder="Department"
                   />
-                  <p
-                    style={{
-                      color: '#6b7280',
-                      fontSize: 11,
-                      marginTop: 4,
-                    }}
-                  >
-                    Automatically filled when you select an employee. You can
-                    change it manually.
-                  </p>
                 </div>
 
                 <div>
@@ -868,7 +890,9 @@ export default function DashboardPage() {
                   <input
                     style={inputStyle}
                     value={assetForm.notes}
-                    onChange={(e) => updateAssetField('notes', e.target.value)}
+                    onChange={(e) =>
+                      updateAssetField('notes', e.target.value)
+                    }
                     placeholder="Additional notes"
                   />
                 </div>
@@ -896,7 +920,7 @@ export default function DashboardPage() {
                   type="button"
                   onClick={() => {
                     setShowAssetForm(false);
-                    setShowAssignedOptions(false);
+                    setEditingAssetId(null);
                   }}
                   style={{
                     ...buttonStyle,
@@ -910,6 +934,7 @@ export default function DashboardPage() {
             </form>
           )}
 
+          {/* Asset search */}
           <div style={{ marginBottom: 16, maxWidth: 400 }}>
             <input
               style={inputStyle}
@@ -919,13 +944,14 @@ export default function DashboardPage() {
             />
           </div>
 
+          {/* Asset table */}
           <div style={{ overflowX: 'auto' }}>
             <table
               style={{
                 width: '100%',
                 borderCollapse: 'collapse',
                 fontSize: 13,
-                minWidth: 850,
+                minWidth: 1050,
               }}
             >
               <thead>
@@ -957,80 +983,434 @@ export default function DashboardPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} style={{ padding: 24, textAlign: 'center' }}>
+                    <td
+                      colSpan={8}
+                      style={{ padding: 24, textAlign: 'center' }}
+                    >
                       Loading assets...
                     </td>
                   </tr>
                 ) : filteredAssets.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ padding: 24, textAlign: 'center' }}>
+                    <td
+                      colSpan={8}
+                      style={{ padding: 24, textAlign: 'center' }}
+                    >
                       No assets found.
                     </td>
                   </tr>
                 ) : (
-                  filteredAssets.map((asset) => (
-                    <tr key={asset.id}>
-                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
-                        {asset.assetTag}
-                      </td>
+                  filteredAssets.map((asset) => {
+                    const canAssign =
+                      asset.status === 'available' &&
+                      !asset.assignedTo;
 
-                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
-                        {asset.name}
-                      </td>
+                    const canUnassign =
+                      asset.status === 'assigned' &&
+                      Boolean(asset.assignedTo);
 
-                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
-                        {asset.category}
-                      </td>
+                    const hasAssignmentMismatch =
+                      (asset.status === 'assigned' && !asset.assignedTo) ||
+                      (asset.status !== 'assigned' && Boolean(asset.assignedTo));
 
-                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
-                        {[asset.brand, asset.model].filter(Boolean).join(' / ') || '—'}
-                      </td>
-
-                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
-                        {asset.assignedTo ? (
-                          <div>
-                            <div style={{ fontWeight: 600 }}>
-                              {asset.assignedTo.name}
-                            </div>
-                            <div style={{ color: '#6b7280', fontSize: 11 }}>
-                              {asset.assignedTo.email}
-                            </div>
-                          </div>
-                        ) : (
-                          <span style={{ color: '#9ca3af' }}>Unassigned</span>
-                        )}
-                      </td>
-
-                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
-                        {asset.department || '—'}
-                      </td>
-
-                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
-                        <span style={statusStyle(asset.status)}>
-                          {asset.status}
-                        </span>
-                      </td>
-
-                      <td style={{ padding: 12, borderBottom: '1px solid #eee' }}>
-                        <button
-                          type="button"
-                          onClick={() => startEditAsset(asset)}
+                    return (
+                      <tr key={asset.id}>
+                        <td
                           style={{
-                            ...buttonStyle,
-                            background: '#dbeafe',
-                            color: '#1d4ed8',
+                            padding: 12,
+                            borderBottom: '1px solid #eee',
                           }}
                         >
-                          Edit
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                          {asset.assetTag}
+                        </td>
+
+                        <td
+                          style={{
+                            padding: 12,
+                            borderBottom: '1px solid #eee',
+                          }}
+                        >
+                          {asset.name}
+                        </td>
+
+                        <td
+                          style={{
+                            padding: 12,
+                            borderBottom: '1px solid #eee',
+                          }}
+                        >
+                          {asset.category}
+                        </td>
+
+                        <td
+                          style={{
+                            padding: 12,
+                            borderBottom: '1px solid #eee',
+                          }}
+                        >
+                          {[asset.brand, asset.model]
+                            .filter(Boolean)
+                            .join(' / ') || '—'}
+                        </td>
+
+                        <td
+                          style={{
+                            padding: 12,
+                            borderBottom: '1px solid #eee',
+                          }}
+                        >
+                          {asset.assignedTo ? (
+                            <div>
+                              <div style={{ fontWeight: 600 }}>
+                                {asset.assignedTo.name}
+                              </div>
+
+                              <div
+                                style={{
+                                  color: '#6b7280',
+                                  fontSize: 11,
+                                }}
+                              >
+                                {asset.assignedTo.email}
+                              </div>
+                            </div>
+                          ) : (
+                            <span style={{ color: '#9ca3af' }}>
+                              Unassigned
+                            </span>
+                          )}
+                        </td>
+
+                        <td
+                          style={{
+                            padding: 12,
+                            borderBottom: '1px solid #eee',
+                          }}
+                        >
+                          {asset.department || '—'}
+                        </td>
+
+                        <td
+                          style={{
+                            padding: 12,
+                            borderBottom: '1px solid #eee',
+                          }}
+                        >
+                          <span style={statusStyle(asset.status)}>
+                            {asset.status}
+                          </span>
+
+                          {hasAssignmentMismatch && (
+                            <div
+                              style={{
+                                color: '#b45309',
+                                fontSize: 10,
+                                marginTop: 5,
+                              }}
+                            >
+                              Assignment data mismatch
+                            </div>
+                          )}
+                        </td>
+
+                        <td
+                          style={{
+                            padding: 12,
+                            borderBottom: '1px solid #eee',
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              gap: 6,
+                              flexWrap: 'wrap',
+                            }}
+                          >
+                            {canManageAssets && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => startEditAsset(asset)}
+                                  style={{
+                                    ...buttonStyle,
+                                    background: '#dbeafe',
+                                    color: '#1d4ed8',
+                                  }}
+                                >
+                                  Edit
+                                </button>
+
+                                <Link
+                                  href={`/assets/${asset.id}/history`}
+                                  style={{
+                                    ...buttonStyle,
+                                    background: '#f3e8ff',
+                                    color: '#7e22ce',
+                                    textDecoration: 'none',
+                                    display: 'inline-block',
+                                  }}
+                                >
+                                  View History
+                                </Link>
+
+                                {canAssign && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openAssignModal(asset)}
+                                    style={{
+                                      ...buttonStyle,
+                                      background: '#dcfce7',
+                                      color: '#166534',
+                                    }}
+                                  >
+                                    Assign
+                                  </button>
+                                )}
+
+                                {canUnassign && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void unassignAsset(asset)}
+                                    style={{
+                                      ...buttonStyle,
+                                      background: '#fee2e2',
+                                      color: '#991b1b',
+                                    }}
+                                  >
+                                    Unassign
+                                  </button>
+                                )}
+                              </>
+                            )}
+
+                            {!canManageAssets && (
+                              <span
+                                style={{
+                                  color: '#9ca3af',
+                                  fontSize: 12,
+                                }}
+                              >
+                                View only
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
         </section>
+
+        {/* Assignment modal */}
+        {selectedAsset && canManageAssets && (
+          <div
+            onClick={closeAssignModal}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 100,
+              background: 'rgba(0,0,0,0.45)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: 16,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: '100%',
+                maxWidth: 500,
+                background: '#fff',
+                borderRadius: 12,
+                padding: 24,
+                boxShadow: '0 15px 40px rgba(0,0,0,0.2)',
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: 21,
+                  fontWeight: 800,
+                  margin: '0 0 8px',
+                }}
+              >
+                Assign Asset
+              </h2>
+
+              <p
+                style={{
+                  color: '#6b7280',
+                  fontSize: 13,
+                  marginBottom: 20,
+                }}
+              >
+                Select an employee to receive this asset.
+              </p>
+
+              <div
+                style={{
+                  background: '#f9fafb',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 7,
+                  padding: 12,
+                  marginBottom: 18,
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: 14 }}>
+                  {selectedAsset.name}
+                </div>
+
+                <div
+                  style={{
+                    color: '#6b7280',
+                    fontSize: 12,
+                    marginTop: 4,
+                  }}
+                >
+                  {selectedAsset.assetTag} • {selectedAsset.category}
+                </div>
+              </div>
+
+              <label style={labelStyle}>Search Employee</label>
+
+              <input
+                autoFocus
+                style={inputStyle}
+                value={employeeSearch}
+                onChange={(e) => {
+                  setEmployeeSearch(e.target.value);
+                  setSelectedEmployeeId('');
+                }}
+                placeholder="Type employee name, email or department..."
+              />
+
+              <div
+                style={{
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 7,
+                  marginTop: 8,
+                  maxHeight: 220,
+                  overflowY: 'auto',
+                }}
+              >
+                {filteredUsers.length === 0 ? (
+                  <p
+                    style={{
+                      padding: 14,
+                      margin: 0,
+                      color: '#6b7280',
+                      fontSize: 13,
+                    }}
+                  >
+                    No matching employees found.
+                  </p>
+                ) : (
+                  filteredUsers.map((user) => (
+                    <button
+                      key={user.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedEmployeeId(String(user.id));
+                        setEmployeeSearch(user.name);
+                      }}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        padding: 12,
+                        border: 'none',
+                        borderBottom: '1px solid #f3f4f6',
+                        background:
+                          selectedEmployeeId === String(user.id)
+                            ? '#eff6ff'
+                            : '#fff',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        color: '#111827',
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: 'block',
+                          fontSize: 13,
+                          fontWeight: 600,
+                        }}
+                      >
+                        {user.name}
+                      </span>
+
+                      <span
+                        style={{
+                          display: 'block',
+                          fontSize: 11,
+                          color: '#6b7280',
+                          marginTop: 3,
+                        }}
+                      >
+                        {user.email}
+                        {user.department ? ` • ${user.department}` : ''}
+                        {user.designation
+                          ? ` • ${user.designation}`
+                          : ''}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              {selectedEmployeeId && (
+                <p
+                  style={{
+                    color: '#166534',
+                    fontSize: 12,
+                    marginTop: 10,
+                  }}
+                >
+                  Employee selected successfully.
+                </p>
+              )}
+
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: 10,
+                  marginTop: 22,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={closeAssignModal}
+                  disabled={savingAssignment}
+                  style={{
+                    ...buttonStyle,
+                    background: '#e5e7eb',
+                    color: '#374151',
+                  }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void assignAsset()}
+                  disabled={!selectedEmployeeId || savingAssignment}
+                  style={{
+                    ...buttonStyle,
+                    background: '#2563eb',
+                    color: '#fff',
+                    opacity:
+                      !selectedEmployeeId || savingAssignment ? 0.6 : 1,
+                  }}
+                >
+                  {savingAssignment ? 'Assigning...' : 'Confirm Assignment'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <footer
           style={{
