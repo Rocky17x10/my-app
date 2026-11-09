@@ -8,7 +8,8 @@ type AdminTab =
   | "assets"
   | "users"
   | "asset-requests"
-  | "asset-returns";
+  | "asset-returns"
+  | "maintenance";
 
 type AdminNavigationProps = {
   activeTab: AdminTab;
@@ -20,6 +21,7 @@ const tabs: { label: string; href: string; id: AdminTab }[] = [
   { label: "User Management", href: "/users", id: "users" },
   { label: "Asset Request", href: "/asset-requests", id: "asset-requests" },
   { label: "Asset Return", href: "/asset-returns", id: "asset-returns" },
+  { label: "Maintenance", href: "/maintenance", id: "maintenance" },
 ];
 
 export default function AdminNavigation({
@@ -27,7 +29,7 @@ export default function AdminNavigation({
 }: AdminNavigationProps) {
   return (
     <nav className="w-full overflow-x-auto">
-      <div className="grid min-w-[750px] grid-cols-5 gap-2">
+      <div className="grid min-w-[900px] grid-cols-6 gap-2">
         {tabs.map((tab) => {
           const active = activeTab === tab.id;
 
