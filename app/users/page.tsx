@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import AdminNavigation from '../components/AdminNavigation';
 
 type UserRole = 'super_admin' | 'admin' | 'user';
 
@@ -321,32 +322,14 @@ export default function UsersPage() {
     <main className="min-h-screen bg-gray-100 p-4 text-gray-900 sm:p-8">
       <div className="mx-auto max-w-7xl">
 
-        <nav className="mb-8 flex flex-wrap items-center justify-between gap-4 rounded-xl bg-white p-4 shadow-sm">
-          <h1 className="text-xl font-bold">IT Inventory System</h1>
-
-          <div className="flex flex-wrap gap-3">
-            <Link
-              href="/dashboard"
-              className="rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
-            >
-              Main Dashboard
-            </Link>
-
-            <Link
-              href="/"
-              className="rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
-            >
-              Asset Management
-            </Link>
-
-            <Link
-              href="/users"
-              className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white"
-            >
-              User Management
-            </Link>
+        {/* Shared five-tab navigation */}
+        <div className="mb-8 rounded-xl bg-white p-4 shadow-sm">
+          <div className="mb-4">
+            <h1 className="text-xl font-bold">IT Inventory System</h1>
           </div>
-        </nav>
+
+          <AdminNavigation activeTab="users" />
+        </div>
 
         <header className="mb-6">
           <h2 className="text-3xl font-bold">User Management</h2>

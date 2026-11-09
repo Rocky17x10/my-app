@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import AdminNavigation from '../components/AdminNavigation';
 
 type UserRole = 'super_admin' | 'admin' | 'user';
 
@@ -98,7 +99,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <main style={{ padding: '40px', fontFamily: 'Arial' }}>
+      <main className="min-h-screen bg-gray-50 flex items-center justify-center p-6 text-gray-800">
         Checking authentication...
       </main>
     );
@@ -106,7 +107,7 @@ export default function DashboardPage() {
 
   if (error) {
     return (
-      <main style={{ padding: '40px', color: 'red' }}>
+      <main className="min-h-screen bg-gray-50 p-6 text-red-600">
         {error}
       </main>
     );
@@ -118,198 +119,158 @@ export default function DashboardPage() {
 
   const isSuperAdmin = profile.role === 'super_admin';
 
-  const navLinkStyle = {
-    padding: '10px 14px',
-    borderRadius: '6px',
-    textDecoration: 'none',
-    fontSize: '13px',
-    fontWeight: 600,
-  };
-
   const cardStyle = {
-    padding: '24px',
-    border: '1px solid #ddd',
+    padding: '20px',
+    border: '1px solid #e5e7eb',
     borderRadius: '12px',
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
     textDecoration: 'none',
-    color: '#111',
+    color: '#111827',
     display: 'block',
   };
 
   return (
-    <main
-      style={{
-        maxWidth: '1100px',
-        margin: '40px auto',
-        padding: '24px',
-        fontFamily: 'Arial, sans-serif',
-      }}
-    >
-      <header
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '16px',
-          marginBottom: '24px',
-        }}
-      >
-        <div>
-          <h1 style={{ marginBottom: '8px' }}>
-            IT Inventory Dashboard
-          </h1>
+    <main className="min-h-screen w-full bg-gray-50 text-gray-900">
+      {/* Header */}
+      <header className="bg-white border-b shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">
+                IT Inventory Dashboard
+              </h1>
 
-          <p style={{ color: '#666', margin: 0 }}>
-            Welcome, {profile.name || profile.email}!
-          </p>
+              <p className="text-sm text-gray-500 mt-1">
+                Welcome, {profile.name || profile.email}!
+              </p>
+            </div>
+
+            <button
+              onClick={handleLogout}
+              className="rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+            >
+              Logout
+            </button>
+          </div>
+
+          {/* Shared five-tab navigation */}
+          <AdminNavigation activeTab="dashboard" />
         </div>
-
-        <button
-          onClick={handleLogout}
-          style={{
-            padding: '11px 20px',
-            color: 'white',
-            backgroundColor: '#dc2626',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-          }}
-        >
-          Logout
-        </button>
       </header>
 
-      <nav
-        style={{
-          display: 'flex',
-          gap: '10px',
-          flexWrap: 'wrap',
-          marginBottom: '30px',
-          padding: '14px',
-          backgroundColor: '#f3f4f6',
-          borderRadius: '10px',
-        }}
-      >
-        <Link
-          href="/dashboard"
-          style={{
-            ...navLinkStyle,
-            backgroundColor: '#2563eb',
-            color: '#fff',
-          }}
-        >
-          Main Dashboard
-        </Link>
+      {/* Dashboard Content */}
+      <div className="max-w-7xl mx-auto p-4 md:p-6">
 
-        <Link
-          href="/"
-          style={{
-            ...navLinkStyle,
-            backgroundColor: '#fff',
-            color: '#374151',
-            border: '1px solid #d1d5db',
-          }}
-        >
-          Asset Management
-        </Link>
+        {/* Account Information */}
+        <section className="bg-white rounded-xl border shadow-sm p-5 mb-5">
+          <h2 className="text-lg font-semibold text-gray-800 mb-3">
+            Account Information
+          </h2>
 
-        <Link
-          href="/users"
-          style={{
-            ...navLinkStyle,
-            backgroundColor: '#fff',
-            color: '#374151',
-            border: '1px solid #d1d5db',
-          }}
-        >
-          User Management
-        </Link>
-      </nav>
-
-      <section
-        style={{
-          padding: '22px',
-          backgroundColor: '#f3f4f6',
-          borderRadius: '12px',
-          marginBottom: '30px',
-        }}
-      >
-        <h2 style={{ marginTop: 0 }}>Account Information</h2>
-
-        <p><strong>Name:</strong> {profile.name}</p>
-        <p><strong>Email:</strong> {profile.email}</p>
-        <p><strong>User ID:</strong> {profile.userId}</p>
-        <p>
-          <strong>Role:</strong>{' '}
-          {isSuperAdmin ? 'Super Admin' : 'Admin'}
-        </p>
-        <p>
-          <strong>Department:</strong>{' '}
-          {profile.department || 'Not specified'}
-        </p>
-        <p>
-          <strong>Designation:</strong>{' '}
-          {profile.designation || 'Not specified'}
-        </p>
-      </section>
-
-      <h2>Management</h2>
-
-      <section
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
-          gap: '18px',
-          marginTop: '18px',
-        }}
-      >
-        <Link href="/" style={cardStyle}>
-          <h3>Asset Management</h3>
-          <p>View, add, edit and manage IT equipment.</p>
-          <strong style={{ color: '#2563eb' }}>
-            Open Asset Management →
-          </strong>
-        </Link>
-
-        <Link href="/users" style={cardStyle}>
-          <h3>Employee Management</h3>
-          <p>Manage employee information, departments and designations.</p>
-          <strong style={{ color: '#2563eb' }}>
-            Open Employee Management →
-          </strong>
-        </Link>
-
-        {isSuperAdmin && (
-          <div
-            style={{
-              ...cardStyle,
-              backgroundColor: '#f9fafb',
-            }}
-          >
-            <h3>Role Management</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
             <p>
-              Promote employees to Admin or change Admin accounts
-              back to regular Users.
+              <strong>Name:</strong> {profile.name}
             </p>
-            <strong style={{ color: '#6b7280' }}>
-              Next feature to build
-            </strong>
-          </div>
-        )}
-      </section>
 
-      <footer
-        style={{
-          marginTop: '40px',
-          paddingTop: '20px',
-          borderTop: '1px solid #ddd',
-          color: '#777',
-          fontSize: '13px',
-        }}
-      >
-        IT Inventory Software
-      </footer>
+            <p>
+              <strong>Email:</strong> {profile.email}
+            </p>
+
+            <p>
+              <strong>User ID:</strong> {profile.userId}
+            </p>
+
+            <p>
+              <strong>Role:</strong>{' '}
+              {isSuperAdmin ? 'Super Admin' : 'Admin'}
+            </p>
+
+            <p>
+              <strong>Department:</strong>{' '}
+              {profile.department || 'Not specified'}
+            </p>
+
+            <p>
+              <strong>Designation:</strong>{' '}
+              {profile.designation || 'Not specified'}
+            </p>
+          </div>
+        </section>
+
+        {/* Management */}
+        <section>
+          <h2 className="text-lg font-semibold text-gray-800 mb-3">
+            Management
+          </h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+
+            <Link
+              href="/"
+              style={cardStyle}
+              className="hover:border-blue-300 hover:shadow-md transition"
+            >
+              <h3 className="font-semibold text-gray-800 mb-2">
+                Asset Management
+              </h3>
+
+              <p className="text-sm text-gray-600 mb-4">
+                View, add, edit and manage IT equipment.
+              </p>
+
+              <strong className="text-sm text-blue-600">
+                Open Asset Management →
+              </strong>
+            </Link>
+
+            <Link
+              href="/users"
+              style={cardStyle}
+              className="hover:border-blue-300 hover:shadow-md transition"
+            >
+              <h3 className="font-semibold text-gray-800 mb-2">
+                Employee Management
+              </h3>
+
+              <p className="text-sm text-gray-600 mb-4">
+                Manage employee information, departments and designations.
+              </p>
+
+              <strong className="text-sm text-blue-600">
+                Open Employee Management →
+              </strong>
+            </Link>
+
+            {isSuperAdmin && (
+              <div
+                style={{
+                  ...cardStyle,
+                  backgroundColor: '#f9fafb',
+                }}
+              >
+                <h3 className="font-semibold text-gray-800 mb-2">
+                  Role Management
+                </h3>
+
+                <p className="text-sm text-gray-600 mb-4">
+                  Promote employees to Admin or change Admin accounts
+                  back to regular Users.
+                </p>
+
+                <strong className="text-sm text-gray-500">
+                  Next feature to build
+                </strong>
+              </div>
+            )}
+
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="mt-6 pt-4 border-t border-gray-200 text-gray-500 text-xs">
+          IT Inventory Software
+        </footer>
+      </div>
     </main>
   );
 }

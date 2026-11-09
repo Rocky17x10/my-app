@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import AdminNavigation from './components/AdminNavigation';
 
 const API_URL = 'http://localhost:3001';
 
@@ -539,49 +540,14 @@ export default function DashboardPage() {
               Manage your organization&apos;s IT assets and employees.
             </p>
           </div>
-
-          <nav style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <Link
-              href="/dashboard"
-              style={{
-                ...buttonStyle,
-                background: '#fff',
-                color: '#374151',
-                border: '1px solid #d1d5db',
-                textDecoration: 'none',
-              }}
-            >
-              Main Dashboard
-            </Link>
-
-            <Link
-              href="/"
-              style={{
-                ...buttonStyle,
-                background: '#2563eb',
-                color: '#fff',
-                textDecoration: 'none',
-              }}
-            >
-              Asset Management
-            </Link>
-
-            {canManageAssets && (
-              <Link
-                href="/users"
-                style={{
-                  ...buttonStyle,
-                  background: '#fff',
-                  color: '#374151',
-                  border: '1px solid #d1d5db',
-                  textDecoration: 'none',
-                }}
-              >
-                User Management
-              </Link>
-            )}
-          </nav>
         </header>
+
+        {/* Shared five-tab admin navigation */}
+        <div style={{ width: '100%', marginBottom: 28 }}>
+          {canManageAssets && (
+            <AdminNavigation activeTab="assets" />
+          )}
+        </div>
 
         {/* Messages */}
         {assetError && (

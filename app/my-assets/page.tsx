@@ -30,31 +30,94 @@ interface Profile {
   designation?: string;
 }
 
+interface ReturnRequest {
+  id: number;
+  asset?: {
+    id: number;
+    assetTag?: string;
+    name?: string;
+  };
+  status: "pending" | "approved" | "rejected";
+  employeeNote?: string;
+  adminNote?: string;
+  condition?: string;
+  requestedAt?: string;
+  reviewedAt?: string;
+}
+
 export default function MyAssetsPage() {
   const router = useRouter();
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [returnRequests, setReturnRequests] = useState<ReturnRequest[]>([]);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    const loadMyAssets = async () => {
-      const token = sessionStorage.getItem("access_token");
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnReason, setReturnReason] = useState("");
+  const [submittingReturn, setSubmittingReturn] = useState(false);
+  const [returnMessage, setReturnMessage] = useState("");
+  const [returnError, setReturnError] = useState("");
 
-      if (!token) {
+  const token = () =>
+    typeof window !== "undefined"
+      ? sessionStorage.getItem("access_token")
+      : null;
+
+  async function loadReturnRequests(authToken: string) {
+    const response = await fetch(`${API_URL}/asset-returns/my`, {
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("Unable to load your return requests.");
+    }
+
+    const data = await response.json();
+    setReturnRequests(Array.isArray(data) ? data : []);
+  }
+
+  async function loadAssets(authToken: string) {
+    const response = await fetch(`${API_URL}/assets`, {
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("Unable to load your assigned assets.");
+    }
+
+    const data = await response.json();
+    setAssets(Array.isArray(data) ? data : []);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMyAssets() {
+      const authToken = token();
+
+      if (!authToken) {
         router.replace("/login");
         return;
       }
 
       try {
-        const profileResponse = await fetch(`${API_URL}/auth/profile`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const profileResponse = await fetch(
+          `${API_URL}/auth/profile`,
+          {
+            headers: {
+              Authorization: `Bearer ${authToken}`,
+            },
+          }
+        );
 
         if (!profileResponse.ok) {
           if (profileResponse.status === 401) {
@@ -77,36 +140,34 @@ export default function MyAssetsPage() {
           return;
         }
 
+        if (cancelled) return;
+
         setProfile(currentUser);
 
-        const assetsResponse = await fetch(`${API_URL}/assets`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (!assetsResponse.ok) {
-          if (assetsResponse.status === 401) {
-            sessionStorage.removeItem("access_token");
-            router.replace("/login");
-            return;
-          }
-
-          throw new Error("Unable to load your assigned assets.");
-        }
-
-        const assetsData = await assetsResponse.json();
-        setAssets(assetsData);
+        await Promise.all([
+          loadAssets(authToken),
+          loadReturnRequests(authToken),
+        ]);
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Something went wrong."
-        );
+        if (!cancelled) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Something went wrong."
+          );
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-    };
+    }
 
     loadMyAssets();
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   const filteredAssets = useMemo(() => {
@@ -143,7 +204,7 @@ export default function MyAssetsPage() {
     (asset) => asset.status === "maintenance"
   ).length;
 
-  const getStatusStyle = (status: string) => {
+  function getStatusStyle(status: string) {
     switch (status) {
       case "assigned":
         return "bg-blue-100 text-blue-700";
@@ -156,12 +217,82 @@ export default function MyAssetsPage() {
       default:
         return "bg-gray-100 text-gray-700";
     }
-  };
+  }
 
-  const logout = () => {
+  function getReturnRequest(assetId: number) {
+    return returnRequests.find(
+      (request) => request.asset?.id === assetId
+    );
+  }
+
+  function logout() {
     sessionStorage.removeItem("access_token");
     router.replace("/login");
-  };
+  }
+
+  function openReturnModal() {
+    setReturnReason("");
+    setReturnError("");
+    setReturnMessage("");
+    setShowReturnModal(true);
+  }
+
+  async function submitReturnRequest() {
+    if (!selectedAsset) return;
+
+    const authToken = token();
+
+    if (!authToken) {
+      router.replace("/login");
+      return;
+    }
+
+    setSubmittingReturn(true);
+    setReturnError("");
+    setReturnMessage("");
+
+    try {
+      const response = await fetch(`${API_URL}/asset-returns`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          assetId: selectedAsset.id,
+          employeeNote: returnReason.trim(),
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const message = Array.isArray(data.message)
+          ? data.message.join(", ")
+          : data.message;
+
+        throw new Error(
+          message || "Unable to submit your return request."
+        );
+      }
+
+      await loadReturnRequests(authToken);
+
+      setShowReturnModal(false);
+      setReturnReason("");
+      setReturnMessage(
+        `Return request for ${selectedAsset.assetTag} submitted successfully.`
+      );
+    } catch (err) {
+      setReturnError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong."
+      );
+    } finally {
+      setSubmittingReturn(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -230,6 +361,12 @@ export default function MyAssetsPage() {
           </div>
         )}
 
+        {returnMessage && (
+          <div className="bg-green-100 text-green-800 p-4 rounded-lg mb-6">
+            {returnMessage}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
           <div className="bg-white p-5 rounded-xl shadow-sm border">
             <p className="text-sm text-gray-500">Total Assets</p>
@@ -291,48 +428,53 @@ export default function MyAssetsPage() {
               </thead>
 
               <tbody>
-                {filteredAssets.map((asset) => (
-                  <tr
-                    key={asset.id}
-                    onClick={() => setSelectedAsset(asset)}
-                    className="border-b hover:bg-blue-50 cursor-pointer"
-                    title="Click to view asset details"
-                  >
-                    <td className="p-3 font-medium text-blue-700">
-                      {asset.assetTag}
-                    </td>
-                    <td className="p-3 text-gray-800">{asset.name}</td>
-                    <td className="p-3 text-gray-600">{asset.category}</td>
-                    <td className="p-3 text-gray-600">
-                      {[asset.brand, asset.model].filter(Boolean).join(" / ") || "-"}
-                    </td>
-                    <td className="p-3 text-gray-600">
-                      {asset.serialNumber || "-"}
-                    </td>
-                    <td className="p-3 text-gray-600">
-                      {asset.department || "-"}
-                    </td>
-                    <td className="p-3 text-gray-600">
-                      {asset.location || "-"}
-                    </td>
-                    <td className="p-3">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${getStatusStyle(
-                          asset.status
-                        )}`}
-                      >
-                        {asset.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {filteredAssets.map((asset) => {
+                  const request = getReturnRequest(asset.id);
+
+                  return (
+                    <tr
+                      key={asset.id}
+                      onClick={() => setSelectedAsset(asset)}
+                      className="border-b hover:bg-blue-50 cursor-pointer"
+                      title="Click to view asset details"
+                    >
+                      <td className="p-3 font-medium text-blue-700">
+                        {asset.assetTag}
+                      </td>
+                      <td className="p-3 text-gray-800">{asset.name}</td>
+                      <td className="p-3 text-gray-600">{asset.category}</td>
+                      <td className="p-3 text-gray-600">
+                        {[asset.brand, asset.model].filter(Boolean).join(" / ") || "-"}
+                      </td>
+                      <td className="p-3 text-gray-600">
+                        {asset.serialNumber || "-"}
+                      </td>
+                      <td className="p-3 text-gray-600">
+                        {asset.department || "-"}
+                      </td>
+                      <td className="p-3 text-gray-600">
+                        {asset.location || "-"}
+                      </td>
+                      <td className="p-3">
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${getStatusStyle(asset.status)}`}
+                        >
+                          {asset.status}
+                        </span>
+
+                        {request?.status === "pending" && (
+                          <p className="text-xs text-orange-600 mt-1">
+                            Return pending
+                          </p>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
 
                 {filteredAssets.length === 0 && (
                   <tr>
-                    <td
-                      colSpan={8}
-                      className="p-8 text-center text-gray-500"
-                    >
+                    <td colSpan={8} className="p-8 text-center text-gray-500">
                       {search
                         ? "No matching assets found."
                         : "No assets are currently assigned to you."}
@@ -385,9 +527,7 @@ export default function MyAssetsPage() {
                 </div>
 
                 <span
-                  className={`px-3 py-2 rounded-full text-sm font-medium capitalize ${getStatusStyle(
-                    selectedAsset.status
-                  )}`}
+                  className={`px-3 py-2 rounded-full text-sm font-medium capitalize ${getStatusStyle(selectedAsset.status)}`}
                 >
                   {selectedAsset.status}
                 </span>
@@ -419,6 +559,43 @@ export default function MyAssetsPage() {
                   {selectedAsset.notes || "No additional notes."}
                 </p>
               </div>
+
+              {getReturnRequest(selectedAsset.id)?.status === "pending" && (
+                <div className="mt-6 rounded-lg bg-orange-50 border border-orange-200 p-4">
+                  <p className="font-semibold text-orange-800">
+                    Return request pending
+                  </p>
+                  <p className="text-sm text-orange-700 mt-1">
+                    Your return request has been submitted and is waiting for Admin review.
+                  </p>
+                </div>
+              )}
+
+              {getReturnRequest(selectedAsset.id)?.status === "rejected" && (
+                <div className="mt-6 rounded-lg bg-red-50 border border-red-200 p-4">
+                  <p className="font-semibold text-red-800">
+                    Previous return request rejected
+                  </p>
+                  <p className="text-sm text-red-700 mt-1">
+                    {getReturnRequest(selectedAsset.id)?.adminNote || "Please contact your Admin for more information."}
+                  </p>
+                </div>
+              )}
+
+              {selectedAsset.status === "assigned" &&
+                getReturnRequest(selectedAsset.id)?.status !== "pending" && (
+                  <div className="mt-6 border-t pt-5">
+                    <button
+                      onClick={openReturnModal}
+                      className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700 text-white px-5 py-3 rounded-lg font-semibold"
+                    >
+                      Request Asset Return
+                    </button>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Submit a request for Admin to review. Your asset remains assigned until the request is approved.
+                    </p>
+                  </div>
+                )}
             </div>
 
             <div className="border-t p-5 flex justify-end">
@@ -428,6 +605,71 @@ export default function MyAssetsPage() {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReturnModal && selectedAsset && (
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[60]"
+          onClick={() => {
+            if (!submittingReturn) setShowReturnModal(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl w-full max-w-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b p-5">
+              <h2 className="text-xl font-bold text-gray-800">
+                Request Asset Return
+              </h2>
+              <p className="text-sm text-gray-500 mt-1">
+                {selectedAsset.assetTag} — {selectedAsset.name}
+              </p>
+            </div>
+
+            <div className="p-5">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Return reason / employee note
+              </label>
+
+              <textarea
+                value={returnReason}
+                onChange={(e) => setReturnReason(e.target.value)}
+                rows={4}
+                placeholder="Example: I no longer need this laptop. Please arrange collection."
+                className="w-full border rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+
+              <p className="text-xs text-gray-500 mt-2">
+                You can leave this field empty if you have no additional note.
+              </p>
+
+              {returnError && (
+                <div className="bg-red-100 text-red-700 p-3 rounded-lg mt-4 text-sm">
+                  {returnError}
+                </div>
+              )}
+
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 mt-6">
+                <button
+                  onClick={() => setShowReturnModal(false)}
+                  disabled={submittingReturn}
+                  className="px-5 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={submitReturnRequest}
+                  disabled={submittingReturn}
+                  className="px-5 py-2 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-semibold disabled:opacity-50"
+                >
+                  {submittingReturn ? "Submitting..." : "Submit Return Request"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

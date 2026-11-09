@@ -2,8 +2,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import AdminNavigation from "../components/AdminNavigation";
 
 const API_URL = "http://localhost:3001";
 
@@ -291,7 +291,7 @@ export default function AssetRequestsPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
               Asset Request Management
@@ -301,32 +301,11 @@ export default function AssetRequestsPage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-4 text-sm font-medium">
-            <Link
-              href="/dashboard"
-              className="text-gray-600 hover:text-blue-600"
-            >
-              Dashboard
-            </Link>
+          {/* Shared five-tab navigation */}
+          <AdminNavigation activeTab="asset-requests" />
 
-            <Link
-              href="/"
-              className="text-gray-600 hover:text-blue-600"
-            >
-              Assets
-            </Link>
-
-            <Link
-              href="/users"
-              className="text-gray-600 hover:text-blue-600"
-            >
-              Users
-            </Link>
-
-            <Link href="/asset-requests" className="text-blue-600">
-              Asset Requests
-            </Link>
-
+          {/* Logout remains separate from navigation */}
+          <div className="flex justify-end">
             <button
               onClick={handleLogout}
               className="rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700"
