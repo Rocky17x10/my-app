@@ -17,17 +17,39 @@ type Profile = {
   designation: string | null;
 };
 
+type DashboardStatistics = {
+  summary: {
+    totalAssets: number;
+    availableAssets: number;
+    assignedAssets: number;
+    maintenanceAssets: number;
+    retiredAssets: number;
+    totalEmployees: number;
+    pendingRequests: number;
+  };
+  departmentStatistics: {
+    department: string;
+    totalAssets: number;
+  }[];
+};
+
 export default function DashboardPage() {
   const router = useRouter();
 
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [statistics, setStatistics] =
+    useState<DashboardStatistics | null>(null);
+
   const [loading, setLoading] = useState(true);
+  const [statisticsLoading, setStatisticsLoading] = useState(false);
+
   const [error, setError] = useState('');
+  const [statisticsError, setStatisticsError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadProfile() {
+    async function loadDashboard() {
       const token = sessionStorage.getItem('access_token');
 
       if (!token) {
@@ -69,6 +91,44 @@ export default function DashboardPage() {
 
         if (!cancelled) {
           setProfile(user);
+          setStatisticsLoading(true);
+        }
+
+        // Load live dashboard statistics
+        try {
+          const statsResponse = await fetch(
+            'http://localhost:3001/dashboard/statistics',
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            },
+          );
+
+          if (!statsResponse.ok) {
+            throw new Error(
+              'Could not load dashboard statistics.',
+            );
+          }
+
+          const statsData =
+            (await statsResponse.json()) as DashboardStatistics;
+
+          if (!cancelled) {
+            setStatistics(statsData);
+          }
+        } catch (statsErr) {
+          if (!cancelled) {
+            setStatisticsError(
+              statsErr instanceof Error
+                ? statsErr.message
+                : 'Could not load dashboard statistics.',
+            );
+          }
+        } finally {
+          if (!cancelled) {
+            setStatisticsLoading(false);
+          }
         }
       } catch (err) {
         if (!cancelled) {
@@ -85,7 +145,7 @@ export default function DashboardPage() {
       }
     }
 
-    loadProfile();
+    loadDashboard();
 
     return () => {
       cancelled = true;
@@ -119,6 +179,92 @@ export default function DashboardPage() {
 
   const isSuperAdmin = profile.role === 'super_admin';
 
+  const summary = statistics?.summary;
+
+  const statCards = [
+    {
+      title: 'Total Assets',
+      value: summary?.totalAssets,
+      color: 'border-blue-500',
+      background: 'bg-blue-50',
+      text: 'text-blue-700',
+    },
+    {
+      title: 'Available Assets',
+      value: summary?.availableAssets,
+      color: 'border-green-500',
+      background: 'bg-green-50',
+      text: 'text-green-700',
+    },
+    {
+      title: 'Assigned Assets',
+      value: summary?.assignedAssets,
+      color: 'border-purple-500',
+      background: 'bg-purple-50',
+      text: 'text-purple-700',
+    },
+    {
+      title: 'Under Maintenance',
+      value: summary?.maintenanceAssets,
+      color: 'border-orange-500',
+      background: 'bg-orange-50',
+      text: 'text-orange-700',
+    },
+    {
+      title: 'Retired Assets',
+      value: summary?.retiredAssets,
+      color: 'border-gray-500',
+      background: 'bg-gray-100',
+      text: 'text-gray-700',
+    },
+    {
+      title: 'Total Employees',
+      value: summary?.totalEmployees,
+      color: 'border-indigo-500',
+      background: 'bg-indigo-50',
+      text: 'text-indigo-700',
+    },
+    {
+      title: 'Pending Requests',
+      value: summary?.pendingRequests,
+      color: 'border-red-500',
+      background: 'bg-red-50',
+      text: 'text-red-700',
+    },
+  ];
+
+  const departmentData = statistics?.departmentStatistics ?? [];
+
+  const maxDepartmentAssets = Math.max(
+    ...departmentData.map((item) => item.totalAssets),
+    1,
+  );
+
+  const totalAssets = summary?.totalAssets ?? 0;
+
+  const statusData = [
+    {
+      name: 'Available',
+      value: summary?.availableAssets ?? 0,
+      color: 'bg-green-500',
+    },
+    {
+      name: 'Assigned',
+      value: summary?.assignedAssets ?? 0,
+      color: 'bg-purple-500',
+    },
+    {
+      name: 'Maintenance',
+      value: summary?.maintenanceAssets ?? 0,
+      color: 'bg-orange-500',
+    },
+    {
+      name: 'Retired',
+      value: summary?.retiredAssets ?? 0,
+      color: 'bg-gray-500',
+    },
+  ];
+
   const cardStyle = {
     padding: '20px',
     border: '1px solid #e5e7eb',
@@ -131,9 +277,11 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen w-full bg-gray-50 text-gray-900">
+
       {/* Header */}
       <header className="bg-white border-b shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col gap-4">
+
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1 className="text-2xl font-bold text-gray-800">
@@ -153,7 +301,6 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          {/* Shared five-tab navigation */}
           <AdminNavigation activeTab="dashboard" />
         </div>
       </header>
@@ -162,12 +309,14 @@ export default function DashboardPage() {
       <div className="max-w-7xl mx-auto p-4 md:p-6">
 
         {/* Account Information */}
-        <section className="bg-white rounded-xl border shadow-sm p-5 mb-5">
+        <section className="bg-white rounded-xl border shadow-sm p-5 mb-6">
+
           <h2 className="text-lg font-semibold text-gray-800 mb-3">
             Account Information
           </h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+
             <p>
               <strong>Name:</strong> {profile.name}
             </p>
@@ -194,11 +343,196 @@ export default function DashboardPage() {
               <strong>Designation:</strong>{' '}
               {profile.designation || 'Not specified'}
             </p>
+
           </div>
+        </section>
+
+        {/* Statistics */}
+        <section className="mb-7">
+
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <h2 className="text-xl font-bold text-gray-800">
+              Inventory Overview
+            </h2>
+
+            <span className="text-xs text-gray-500">
+              Live database statistics
+            </span>
+          </div>
+
+          {statisticsLoading && (
+            <p className="text-sm text-gray-500 mb-4">
+              Loading statistics...
+            </p>
+          )}
+
+          {statisticsError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 mb-4">
+              {statisticsError}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
+            {statCards.map((card) => (
+              <div
+                key={card.title}
+                className={`rounded-xl border-l-4 ${card.color} ${card.background} p-5 shadow-sm`}
+              >
+                <p className="text-sm text-gray-600 font-medium">
+                  {card.title}
+                </p>
+
+                <p className={`text-3xl font-bold mt-2 ${card.text}`}>
+                  {statisticsLoading && !statistics
+                    ? '...'
+                    : statisticsError && !statistics
+                      ? '--'
+                      : card.value ?? 0}
+                </p>
+              </div>
+            ))}
+
+          </div>
+        </section>
+
+        {/* Graphical Reports */}
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-7">
+
+          {/* Asset Status Chart */}
+          <div className="bg-white rounded-xl border shadow-sm p-5">
+
+            <h2 className="text-lg font-semibold text-gray-800 mb-5">
+              Asset Status Distribution
+            </h2>
+
+            {!statistics && !statisticsLoading && (
+              <p className="text-sm text-gray-500">
+                Statistics are not available.
+              </p>
+            )}
+
+            {statistics && (
+              <>
+                <div className="flex h-5 overflow-hidden rounded-full bg-gray-100 mb-5">
+
+                  {statusData.map((item) => (
+                    <div
+                      key={item.name}
+                      className={item.color}
+                      style={{
+                        width:
+                          totalAssets > 0
+                            ? `${(item.value / totalAssets) * 100}%`
+                            : '0%',
+                      }}
+                      title={`${item.name}: ${item.value}`}
+                    />
+                  ))}
+
+                </div>
+
+                <div className="space-y-4">
+
+                  {statusData.map((item) => (
+                    <div key={item.name}>
+
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-600">
+                          {item.name}
+                        </span>
+
+                        <strong className="text-gray-800">
+                          {item.value}
+                        </strong>
+                      </div>
+
+                      <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">
+                        <div
+                          className={`${item.color} h-full rounded-full`}
+                          style={{
+                            width:
+                              totalAssets > 0
+                                ? `${(item.value / totalAssets) * 100}%`
+                                : '0%',
+                          }}
+                        />
+                      </div>
+
+                    </div>
+                  ))}
+
+                </div>
+
+                <p className="text-xs text-gray-500 mt-5">
+                  Total assets: {totalAssets}
+                </p>
+              </>
+            )}
+
+          </div>
+
+          {/* Department Chart */}
+          <div className="bg-white rounded-xl border shadow-sm p-5">
+
+            <h2 className="text-lg font-semibold text-gray-800 mb-5">
+              Department-wise Assets
+            </h2>
+
+            {statistics && departmentData.length === 0 && (
+              <p className="text-sm text-gray-500">
+                No department statistics available yet.
+              </p>
+            )}
+
+            {statistics && departmentData.length > 0 && (
+              <div className="space-y-5">
+
+                {departmentData.map((item) => (
+                  <div key={item.department}>
+
+                    <div className="flex justify-between gap-3 text-sm mb-2">
+
+                      <span className="text-gray-700 font-medium">
+                        {item.department}
+                      </span>
+
+                      <strong className="text-gray-800">
+                        {item.totalAssets}
+                      </strong>
+
+                    </div>
+
+                    <div className="h-3 rounded-full bg-gray-100 overflow-hidden">
+
+                      <div
+                        className="h-full rounded-full bg-blue-500"
+                        style={{
+                          width: `${(item.totalAssets / maxDepartmentAssets) * 100}%`,
+                        }}
+                      />
+
+                    </div>
+
+                  </div>
+                ))}
+
+              </div>
+            )}
+
+            {statisticsLoading && !statistics && (
+              <p className="text-sm text-gray-500">
+                Loading department statistics...
+              </p>
+            )}
+
+          </div>
+
         </section>
 
         {/* Management */}
         <section>
+
           <h2 className="text-lg font-semibold text-gray-800 mb-3">
             Management
           </h2>
@@ -270,6 +604,7 @@ export default function DashboardPage() {
         <footer className="mt-6 pt-4 border-t border-gray-200 text-gray-500 text-xs">
           IT Inventory Software
         </footer>
+
       </div>
     </main>
   );
