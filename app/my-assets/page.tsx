@@ -327,7 +327,14 @@ export default function MyAssetsPage() {
               onClick={() => router.push("/my-requests")}
               className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg"
             >
-              My Requests
+              Asset Requests
+            </button>
+
+            <button
+              onClick={() => router.push("/my-requests/tickets")}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg"
+            >
+              IT Support Tickets
             </button>
 
             <button

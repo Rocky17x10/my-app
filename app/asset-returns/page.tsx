@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AdminNavigation from "../components/AdminNavigation";
+import NotificationBell from "../components/NotificationBell";
 
 const API_URL = "http://localhost:3001";
 
@@ -360,11 +361,9 @@ export default function AssetReturnsPage() {
             </p>
           </div>
 
-          {/* Shared five-tab navigation */}
-          <AdminNavigation activeTab="asset-returns" />
+          <div className="flex items-center justify-end gap-3">
+            <NotificationBell ticketHref="/support-center/tickets" />
 
-          {/* Logout remains separate */}
-          <div className="flex justify-end">
             <button
               onClick={logout}
               className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700"
@@ -372,6 +371,8 @@ export default function AssetReturnsPage() {
               Logout
             </button>
           </div>
+
+          <AdminNavigation activeTab="asset-returns" />
         </div>
       </header>
 

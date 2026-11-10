@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import AdminNavigation from '../components/AdminNavigation';
+import NotificationBell from '../components/NotificationBell';
 
 type UserRole = 'super_admin' | 'admin' | 'user';
 
@@ -322,10 +323,12 @@ export default function UsersPage() {
     <main className="min-h-screen bg-gray-100 p-4 text-gray-900 sm:p-8">
       <div className="mx-auto max-w-7xl">
 
-        {/* Shared five-tab navigation */}
+        {/* Shared navigation and notification bell */}
         <div className="mb-8 rounded-xl bg-white p-4 shadow-sm">
-          <div className="mb-4">
+          <div className="mb-4 flex items-center justify-between gap-3">
             <h1 className="text-xl font-bold">IT Inventory System</h1>
+
+            <NotificationBell ticketHref="/support-center/tickets" />
           </div>
 
           <AdminNavigation activeTab="users" />

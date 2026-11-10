@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import AdminNavigation from './components/AdminNavigation';
+import NotificationBell from './components/NotificationBell';
 
 const API_URL = 'http://localhost:3001';
 
@@ -181,6 +182,11 @@ export default function DashboardPage() {
 
   const canManageAssets =
     currentRole === 'admin' || currentRole === 'super_admin';
+
+  function handleLogout() {
+    sessionStorage.removeItem('access_token');
+    window.location.assign('/login');
+  }
 
   // Load profile, assets and employee list.
   async function refreshData() {
@@ -540,9 +546,31 @@ export default function DashboardPage() {
               Manage your organization&apos;s IT assets and employees.
             </p>
           </div>
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+            }}
+          >
+            <NotificationBell ticketHref="/support-center/tickets" />
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              style={{
+                ...buttonStyle,
+                background: '#fee2e2',
+                color: '#991b1b',
+              }}
+            >
+              Logout
+            </button>
+          </div>
         </header>
 
-        {/* Shared five-tab admin navigation */}
+        {/* Shared admin navigation */}
         <div style={{ width: '100%', marginBottom: 28 }}>
           {canManageAssets && (
             <AdminNavigation activeTab="assets" />

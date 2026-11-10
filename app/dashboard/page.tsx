@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AdminNavigation from '../components/AdminNavigation';
+import NotificationBell from '../components/NotificationBell';
 
 type UserRole = 'super_admin' | 'admin' | 'user';
 
@@ -293,12 +294,19 @@ export default function DashboardPage() {
               </p>
             </div>
 
-            <button
-              onClick={handleLogout}
-              className="rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700"
-            >
-              Logout
-            </button>
+            {/* Notification Bell and Logout */}
+            <div className="flex items-center gap-3">
+              <NotificationBell
+                ticketHref="/support-center/tickets"
+              />
+
+              <button
+                onClick={handleLogout}
+                className="rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+              >
+                Logout
+              </button>
+            </div>
           </div>
 
           <AdminNavigation activeTab="dashboard" />

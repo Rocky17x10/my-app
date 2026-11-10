@@ -19,7 +19,7 @@ const tabs: { label: string; href: string; id: AdminTab }[] = [
   { label: "Dashboard", href: "/dashboard", id: "dashboard" },
   { label: "Asset Management", href: "/", id: "assets" },
   { label: "User Management", href: "/users", id: "users" },
-  { label: "Asset Request", href: "/asset-requests", id: "asset-requests" },
+  { label: "Support Center", href: "/support-center", id: "asset-requests" },
   { label: "Asset Return", href: "/asset-returns", id: "asset-returns" },
   { label: "Maintenance", href: "/maintenance", id: "maintenance" },
 ];

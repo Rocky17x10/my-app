@@ -202,8 +202,8 @@ export default function MyRequestsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <header className="bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
               My Asset Requests
@@ -213,20 +213,38 @@ export default function MyRequestsPage() {
             </p>
           </div>
 
-          <nav className="flex flex-wrap gap-4 text-sm font-medium">
+          <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/my-assets"
-              className="text-gray-600 hover:text-blue-600"
+              className="rounded-lg bg-gray-100 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-200"
             >
               My Assets
             </Link>
+
             <Link
               href="/my-requests"
-              className="text-blue-600"
+              className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white"
             >
-              My Requests
+              Asset Requests
             </Link>
-          </nav>
+
+            <Link
+              href="/my-requests/tickets"
+              className="rounded-lg bg-gray-100 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-200"
+            >
+              IT Support Tickets
+            </Link>
+
+            <button
+              onClick={() => {
+                sessionStorage.removeItem("access_token");
+                router.replace("/login");
+              }}
+              className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700"
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 

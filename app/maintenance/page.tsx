@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AdminNavigation from "../components/AdminNavigation";
+import NotificationBell from "../components/NotificationBell";
 
 const API_URL = "http://localhost:3001";
 
@@ -384,7 +385,9 @@ export default function MaintenancePage() {
     setCreateForm(emptyCreateForm);
   }
 
-  async function createMaintenance(event: React.FormEvent<HTMLFormElement>) {
+  async function createMaintenance(
+    event: React.FormEvent<HTMLFormElement>,
+  ) {
     event.preventDefault();
 
     if (!createForm.assetId) {
@@ -542,15 +545,6 @@ export default function MaintenancePage() {
       setSuccess(
         `Maintenance record #${data.id} completed successfully. The asset is now available.`,
       );
-
-      // Refresh the selected record details from the updated list.
-      const updatedRecord = records.find((item) => item.id === data.id);
-      if (updatedRecord) {
-        setSelectedRecord({
-          ...updatedRecord,
-          ...data,
-        });
-      }
     } catch (err) {
       setError(
         err instanceof Error
@@ -588,18 +582,9 @@ export default function MaintenancePage() {
             </p>
           </div>
 
-          <AdminNavigation activeTab="maintenance" />
-
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-sm text-gray-600">
-              Welcome,{" "}
-              <span className="font-semibold text-gray-900">
-                {profile?.name || profile?.email}
-              </span>
-              <span className="ml-2 capitalize text-gray-500">
-                ({profile?.role.replace("_", " ")})
-              </span>
-            </div>
+          {/* Notification Bell and Logout above navigation */}
+          <div className="flex items-center justify-end gap-3">
+            <NotificationBell ticketHref="/support-center/tickets" />
 
             <button
               onClick={logout}
@@ -608,10 +593,23 @@ export default function MaintenancePage() {
               Logout
             </button>
           </div>
+
+          {/* Keep all six navigation tabs in their existing layout */}
+          <AdminNavigation activeTab="maintenance" />
         </div>
       </header>
 
       <div className="mx-auto max-w-7xl px-4 py-6 md:px-6">
+        <div className="mb-5 text-sm text-gray-600">
+          Welcome,{" "}
+          <span className="font-semibold text-gray-900">
+            {profile?.name || profile?.email}
+          </span>
+          <span className="ml-2 capitalize text-gray-500">
+            ({profile?.role.replace("_", " ")})
+          </span>
+        </div>
+
         {error && !selectedRecord && (
           <div className="mb-5 flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             <span>{error}</span>
