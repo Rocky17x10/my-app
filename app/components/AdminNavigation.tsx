@@ -9,7 +9,10 @@ type AdminTab =
   | "users"
   | "asset-requests"
   | "asset-returns"
-  | "maintenance";
+  | "maintenance"
+  | "reports"
+  | "support-center"
+  | "activity-logs";
 
 type AdminNavigationProps = {
   activeTab: AdminTab;
@@ -19,17 +22,20 @@ const tabs: { label: string; href: string; id: AdminTab }[] = [
   { label: "Dashboard", href: "/dashboard", id: "dashboard" },
   { label: "Asset Management", href: "/", id: "assets" },
   { label: "User Management", href: "/users", id: "users" },
-  { label: "Support Center", href: "/support-center", id: "asset-requests" },
+  { label: "Asset Requests", href: "/asset-requests", id: "asset-requests" },
   { label: "Asset Return", href: "/asset-returns", id: "asset-returns" },
   { label: "Maintenance", href: "/maintenance", id: "maintenance" },
+  { label: "Reports", href: "/reports", id: "reports" },
+  { label: "Support Center", href: "/support-center", id: "support-center" },
+  { label: "Activity Logs", href: "/activity-logs", id: "activity-logs" },
 ];
 
 export default function AdminNavigation({
   activeTab,
 }: AdminNavigationProps) {
   return (
-    <nav className="w-full overflow-x-auto">
-      <div className="grid min-w-[900px] grid-cols-6 gap-2">
+    <nav className="w-full min-w-0 overflow-x-auto">
+      <div className="grid min-w-[1350px] grid-cols-9 gap-2">
         {tabs.map((tab) => {
           const active = activeTab === tab.id;
 

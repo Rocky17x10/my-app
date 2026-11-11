@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import NotificationBell from "../components/NotificationBell";
 
 const API_URL = "http://localhost:3001";
 
@@ -336,6 +337,8 @@ export default function MyAssetsPage() {
             >
               IT Support Tickets
             </button>
+
+            <NotificationBell ticketHref="/my-requests/tickets" />
 
             <button
               onClick={logout}

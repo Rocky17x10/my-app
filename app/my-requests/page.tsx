@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import NotificationBell from "../components/NotificationBell";
 
 const API_URL = "http://localhost:3001";
 
@@ -234,6 +235,8 @@ export default function MyRequestsPage() {
             >
               IT Support Tickets
             </Link>
+
+            <NotificationBell ticketHref="/my-requests/tickets" />
 
             <button
               onClick={() => {

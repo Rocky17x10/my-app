@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AdminNavigation from "../../components/AdminNavigation";
+import TicketDetailsModal from "../../components/TicketDetailsModal";
 
 const API_URL = "http://localhost:3001";
 
@@ -214,7 +215,8 @@ export default function SupportTicketsPage() {
     initialize();
   }, [router, loadTickets]);
 
-  const openTicket = async (ticketId: number) => {
+  // Load a specific ticket and open the details popup.
+  const openTicket = useCallback(async (ticketId: number) => {
     const token = getToken();
 
     if (!token) {
@@ -253,7 +255,39 @@ export default function SupportTicketsPage() {
     } finally {
       setDetailsLoading(false);
     }
-  };
+  }, [router]);
+
+  // Open tickets from notification clicks or notification URLs.
+  useEffect(() => {
+    const handleNotificationTicket = (event: Event) => {
+      const customEvent = event as CustomEvent<{ ticketId: number }>;
+      const ticketId = Number(customEvent.detail?.ticketId);
+
+      if (Number.isInteger(ticketId) && ticketId > 0) {
+        openTicket(ticketId);
+      }
+    };
+
+    window.addEventListener(
+      "open-support-ticket",
+      handleNotificationTicket
+    );
+
+    // Open ticket when arriving from a notification link.
+    const params = new URLSearchParams(window.location.search);
+    const ticketId = Number(params.get("ticketId"));
+
+    if (Number.isInteger(ticketId) && ticketId > 0) {
+      openTicket(ticketId);
+    }
+
+    return () => {
+      window.removeEventListener(
+        "open-support-ticket",
+        handleNotificationTicket
+      );
+    };
+  }, [openTicket]);
 
   const sendReply = async () => {
     if (!selectedTicket || !reply.trim()) return;
@@ -650,30 +684,12 @@ export default function SupportTicketsPage() {
         )}
 
         {selectedTicket && !detailsLoading && (
-          <section className="space-y-5 rounded-xl bg-white p-5 shadow-sm md:p-7">
-            <div className="flex flex-col justify-between gap-3 border-b pb-5 md:flex-row md:items-start">
-              <div>
-                <p className="text-sm font-semibold text-blue-700">
-                  {selectedTicket.ticketNumber}
-                </p>
-
-                <h2 className="mt-1 text-xl font-bold text-gray-900">
-                  {selectedTicket.subject}
-                </h2>
-
-                <p className="mt-1 text-sm text-gray-500">
-                  Created {formatDate(selectedTicket.createdAt)}
-                </p>
-              </div>
-
-              <button
-                onClick={() => setSelectedTicket(null)}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                Close Details
-              </button>
-            </div>
-
+          <TicketDetailsModal
+            ticketNumber={selectedTicket.ticketNumber}
+            subject={selectedTicket.subject}
+            createdAt={selectedTicket.createdAt}
+            onClose={() => setSelectedTicket(null)}
+          >
             <div className="grid gap-5 md:grid-cols-2">
               <div className="space-y-3">
                 <div>
@@ -834,7 +850,7 @@ export default function SupportTicketsPage() {
                 </div>
               </div>
             </div>
-          </section>
+          </TicketDetailsModal>
         )}
       </div>
     </main>

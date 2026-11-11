@@ -4,6 +4,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import TicketDetailsModal from "../../components/TicketDetailsModal";
+import NotificationBell from "../../components/NotificationBell";
 
 const API_URL = "http://localhost:3001";
 
@@ -259,7 +261,7 @@ export default function MySupportTicketsPage() {
     }
   };
 
-  const openTicket = async (ticketId: number) => {
+  const openTicket = useCallback(async (ticketId: number) => {
     const token = getToken();
 
     if (!token) {
@@ -297,7 +299,37 @@ export default function MySupportTicketsPage() {
     } finally {
       setDetailsLoading(false);
     }
-  };
+  }, [router]);
+
+  useEffect(() => {
+    const handleNotificationTicket = (event: Event) => {
+      const customEvent = event as CustomEvent<{ ticketId: number }>;
+      const ticketId = Number(customEvent.detail?.ticketId);
+
+      if (Number.isInteger(ticketId) && ticketId > 0) {
+        openTicket(ticketId);
+      }
+    };
+
+    window.addEventListener(
+      "open-support-ticket",
+      handleNotificationTicket
+    );
+
+    const params = new URLSearchParams(window.location.search);
+    const ticketId = Number(params.get("ticketId"));
+
+    if (Number.isInteger(ticketId) && ticketId > 0) {
+      openTicket(ticketId);
+    }
+
+    return () => {
+      window.removeEventListener(
+        "open-support-ticket",
+        handleNotificationTicket
+      );
+    };
+  }, [openTicket]);
 
   const sendReply = async () => {
     if (!selectedTicket || !reply.trim()) return;
@@ -404,6 +436,8 @@ export default function MySupportTicketsPage() {
             >
               IT Support Tickets
             </Link>
+
+            <NotificationBell ticketHref="/my-requests/tickets" />
 
             <button
               onClick={handleLogout}
@@ -691,30 +725,12 @@ export default function MySupportTicketsPage() {
         )}
 
         {selectedTicket && !detailsLoading && (
-          <section className="space-y-5 rounded-xl bg-white p-5 shadow-sm md:p-7">
-            <div className="flex flex-col justify-between gap-3 border-b pb-5 sm:flex-row sm:items-start">
-              <div>
-                <p className="text-sm font-semibold text-blue-700">
-                  {selectedTicket.ticketNumber}
-                </p>
-
-                <h2 className="mt-1 text-xl font-bold text-gray-900">
-                  {selectedTicket.subject}
-                </h2>
-
-                <p className="mt-1 text-sm text-gray-500">
-                  Created {formatDate(selectedTicket.createdAt)}
-                </p>
-              </div>
-
-              <button
-                onClick={() => setSelectedTicket(null)}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                Close Details
-              </button>
-            </div>
-
+          <TicketDetailsModal
+            ticketNumber={selectedTicket.ticketNumber}
+            subject={selectedTicket.subject}
+            createdAt={selectedTicket.createdAt}
+            onClose={() => setSelectedTicket(null)}
+          >
             <div className="grid gap-4 sm:grid-cols-3">
               <div>
                 <p className="text-xs font-semibold uppercase text-gray-500">
@@ -832,7 +848,7 @@ export default function MySupportTicketsPage() {
                 </p>
               )}
             </div>
-          </section>
+          </TicketDetailsModal>
         )}
       </div>
     </main>

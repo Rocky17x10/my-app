@@ -13,6 +13,7 @@ type Notification = {
   type: string;
   isRead: boolean;
   createdAt: string;
+  referenceId?: number | null;
   ticket: {
     id: number;
     ticketNumber?: string;
@@ -45,15 +46,11 @@ export default function NotificationBell({
     try {
       const [notificationResponse, countResponse] = await Promise.all([
         fetch(`${API_URL}/notifications`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
         }),
         fetch(`${API_URL}/notifications/unread-count`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
         }),
       ]);
@@ -82,9 +79,7 @@ export default function NotificationBell({
   useEffect(() => {
     loadNotifications();
 
-    const interval = window.setInterval(() => {
-      loadNotifications();
-    }, 30000);
+    const interval = window.setInterval(loadNotifications, 30000);
 
     return () => window.clearInterval(interval);
   }, [loadNotifications]);
@@ -99,9 +94,7 @@ export default function NotificationBell({
         `${API_URL}/notifications/${notificationId}/read`,
         {
           method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         }
       );
 
@@ -139,15 +132,10 @@ export default function NotificationBell({
     setError("");
 
     try {
-      const response = await fetch(
-        `${API_URL}/notifications/read-all`,
-        {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const response = await fetch(`${API_URL}/notifications/read-all`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
       if (!response.ok) {
         throw new Error("Unable to mark all notifications as read.");
@@ -183,16 +171,83 @@ export default function NotificationBell({
 
     setIsOpen(false);
 
-    if (notification.ticket?.id) {
-      router.push(
-        `${ticketHref}?ticketId=${notification.ticket.id}`
+    // New employee asset request: open the exact request popup.
+    if (
+      notification.type === "asset_request_new" &&
+      notification.referenceId
+    ) {
+      const requestId = notification.referenceId;
+
+      router.push(`/asset-requests?requestId=${requestId}`);
+
+      // Also notify the page if it is already open.
+      window.dispatchEvent(
+        new CustomEvent("open-asset-request", {
+          detail: { requestId },
+        })
       );
+
+      return;
+    }
+
+    // Existing support-ticket notification behavior.
+    if (notification.ticket?.id) {
+      router.push(`${ticketHref}?ticketId=${notification.ticket.id}`);
+
+      window.dispatchEvent(
+        new CustomEvent("open-support-ticket", {
+          detail: { ticketId: notification.ticket.id },
+        })
+      );
+
+      return;
+    }
+
+    // Employee asset request approval or rejection.
+    if (
+      notification.type === "asset_request_approved" ||
+      notification.type === "asset_request_rejected"
+    ) {
+      router.push("/my-requests");
+      return;
+    }
+
+    // Employee asset assignment notification.
+    if (notification.type === "asset_assigned") {
+      router.push("/my-assets");
     }
   };
 
-  const formatDate = (value: string) => {
-    return new Date(value).toLocaleString();
+  const getNotificationAction = (notification: Notification) => {
+    if (
+      notification.type === "asset_request_new" &&
+      notification.referenceId
+    ) {
+      return `Request #${notification.referenceId} · Review request`;
+    }
+
+    if (notification.ticket?.id) {
+      return notification.ticket.ticketNumber
+        ? `${notification.ticket.ticketNumber} · View ticket`
+        : `Ticket #${notification.ticket.id} · View ticket`;
+    }
+
+    if (
+      notification.type === "asset_request_approved" ||
+      notification.type === "asset_request_rejected"
+    ) {
+      return "View my requests";
+    }
+
+    if (notification.type === "asset_assigned") {
+      return "View my assets";
+    }
+
+    return null;
   };
+
+  const formatDate = (value: string) =>
+    new Date(value).toLocaleString();
 
   return (
     <div className="relative">
@@ -298,12 +353,9 @@ export default function NotificationBell({
                         {notification.message}
                       </p>
 
-                      {notification.ticket && (
+                      {getNotificationAction(notification) && (
                         <p className="mt-2 text-xs font-semibold text-blue-600">
-                          {notification.ticket.ticketNumber
-                            ? notification.ticket.ticketNumber
-                            : `Ticket #${notification.ticket.id}`}
-                          {" · View ticket"}
+                          {getNotificationAction(notification)}
                         </p>
                       )}
 

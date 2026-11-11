@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AdminNavigation from "../components/AdminNavigation";
+import NotificationBell from "../components/NotificationBell";
 
 const API_URL = "http://localhost:3001";
 
@@ -58,8 +59,10 @@ export default function AssetRequestsPage() {
 
   const getToken = () => sessionStorage.getItem("access_token");
 
+  // Load requests and return them so a notification can
+  // open the exact request after the data has loaded.
   const loadRequests = useCallback(
-    async (token: string) => {
+    async (token: string): Promise<AssetRequest[]> => {
       const response = await fetch(`${API_URL}/asset-requests`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -70,20 +73,23 @@ export default function AssetRequestsPage() {
       if (response.status === 401) {
         sessionStorage.removeItem("access_token");
         router.push("/login");
-        return;
+        return [];
       }
 
       if (response.status === 403) {
         router.push("/my-assets");
-        return;
+        return [];
       }
 
       if (!response.ok) {
         throw new Error("Could not load asset requests.");
       }
 
-      const data = await response.json();
+      const data: AssetRequest[] = await response.json();
+
       setRequests(data);
+
+      return data;
     },
     [router]
   );
@@ -126,7 +132,49 @@ export default function AssetRequestsPage() {
         }
 
         setProfile(currentUser);
-        await loadRequests(token);
+
+        // First load all requests from the backend.
+        const loadedRequests = await loadRequests(token);
+
+        // Check whether the page was opened from a notification.
+        const params = new URLSearchParams(window.location.search);
+        const requestIdParam = params.get("requestId");
+
+        if (requestIdParam !== null) {
+          const requestId = Number(requestIdParam);
+
+          if (
+            Number.isInteger(requestId) &&
+            requestId > 0
+          ) {
+            const requested = loadedRequests.find(
+              (request) => request.id === requestId
+            );
+
+            if (requested) {
+              setSelectedRequest(requested);
+              setAdminNote("");
+              setError("");
+              setSuccess("");
+            } else {
+              setError(
+                `Asset request #${requestId} was not found. It may have been deleted or is no longer available.`
+              );
+            }
+          } else {
+            setError("The asset request ID in the notification is invalid.");
+          }
+
+          // Remove requestId from the URL after processing it.
+          const currentUrl = new URL(window.location.href);
+          currentUrl.searchParams.delete("requestId");
+
+          window.history.replaceState(
+            {},
+            "",
+            `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`
+          );
+        }
       } catch (err) {
         setError(
           err instanceof Error
@@ -292,27 +340,34 @@ export default function AssetRequestsPage() {
       {/* Header */}
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              Asset Request Management
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Review and manage employee equipment requests.
-            </p>
+
+          {/* Page title, Notification Bell and Logout */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Asset Request Management
+              </h1>
+
+              <p className="text-sm text-gray-500 mt-1">
+                Review and manage employee equipment requests.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <NotificationBell ticketHref="/support-center/tickets" />
+
+              <button
+                onClick={handleLogout}
+                className="rounded-lg bg-red-600 px-4 py-2.5 text-white hover:bg-red-700"
+              >
+                Logout
+              </button>
+            </div>
           </div>
 
-          {/* Shared five-tab navigation */}
+          {/* Navigation tabs below account controls */}
           <AdminNavigation activeTab="asset-requests" />
 
-          {/* Logout remains separate from navigation */}
-          <div className="flex justify-end">
-            <button
-              onClick={handleLogout}
-              className="rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700"
-            >
-              Logout
-            </button>
-          </div>
         </div>
       </header>
 
@@ -408,6 +463,7 @@ export default function AssetRequestsPage() {
                 if (token) {
                   setError("");
                   setSuccess("");
+
                   loadRequests(token).catch((err) =>
                     setError(err.message || "Refresh failed.")
                   );
