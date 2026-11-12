@@ -55,6 +55,19 @@ const actionOptions = [
   "ASSET_UPDATED",
   "ASSET_ASSIGNED",
   "ASSET_UNASSIGNED",
+
+  "ASSET_RETURN_REQUESTED",
+  "ASSET_RETURN_APPROVED",
+  "ASSET_RETURN_REJECTED",
+
+  "EMPLOYEE_CREATED",
+  "EMPLOYEE_UPDATED",
+  "EMPLOYEE_ROLE_CHANGED",
+  "EMPLOYEE_DELETED",
+
+  "MAINTENANCE_CREATED",
+  "MAINTENANCE_UPDATED",
+  "MAINTENANCE_STATUS_CHANGED",
 ];
 
 function formatAction(action: string) {
@@ -78,13 +91,29 @@ function formatDate(value: string) {
 function getActionStyle(action: string) {
   switch (action) {
     case "ASSET_CREATED":
+    case "EMPLOYEE_CREATED":
+    case "MAINTENANCE_CREATED":
+    case "ASSET_RETURN_REQUESTED":
       return "bg-green-100 text-green-700";
+
     case "ASSET_UPDATED":
+    case "EMPLOYEE_UPDATED":
+    case "MAINTENANCE_UPDATED":
       return "bg-blue-100 text-blue-700";
+
     case "ASSET_ASSIGNED":
+    case "EMPLOYEE_ROLE_CHANGED":
+    case "ASSET_RETURN_APPROVED":
       return "bg-purple-100 text-purple-700";
+
     case "ASSET_UNASSIGNED":
+    case "MAINTENANCE_STATUS_CHANGED":
       return "bg-orange-100 text-orange-700";
+
+    case "ASSET_RETURN_REJECTED":
+    case "EMPLOYEE_DELETED":
+      return "bg-red-100 text-red-700";
+
     default:
       return "bg-gray-100 text-gray-700";
   }
@@ -398,7 +427,7 @@ export default function ActivityLogsPage() {
                 Activity Filters
               </h2>
               <p className="mt-1 text-sm text-gray-500">
-                Search and filter recorded activities.
+                Search and filter asset, employee, maintenance and return activities.
               </p>
             </div>
 
@@ -441,11 +470,46 @@ export default function ActivityLogsPage() {
               className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">All Activity Types</option>
-              {actionOptions.map((action) => (
-                <option key={action} value={action}>
-                  {formatAction(action)}
-                </option>
-              ))}
+
+              <optgroup label="Asset Activities">
+                {actionOptions
+                  .filter((action) => action.startsWith("ASSET_") && !action.startsWith("ASSET_RETURN_"))
+                  .map((action) => (
+                    <option key={action} value={action}>
+                      {formatAction(action)}
+                    </option>
+                  ))}
+              </optgroup>
+
+              <optgroup label="Asset Return Activities">
+                {actionOptions
+                  .filter((action) => action.startsWith("ASSET_RETURN_"))
+                  .map((action) => (
+                    <option key={action} value={action}>
+                      {formatAction(action)}
+                    </option>
+                  ))}
+              </optgroup>
+
+              <optgroup label="Employee Activities">
+                {actionOptions
+                  .filter((action) => action.startsWith("EMPLOYEE_"))
+                  .map((action) => (
+                    <option key={action} value={action}>
+                      {formatAction(action)}
+                    </option>
+                  ))}
+              </optgroup>
+
+              <optgroup label="Maintenance Activities">
+                {actionOptions
+                  .filter((action) => action.startsWith("MAINTENANCE_"))
+                  .map((action) => (
+                    <option key={action} value={action}>
+                      {formatAction(action)}
+                    </option>
+                  ))}
+              </optgroup>
             </select>
 
             <select
@@ -458,8 +522,10 @@ export default function ActivityLogsPage() {
             >
               <option value="all">All Entity Types</option>
               <option value="asset">Asset</option>
-              <option value="user">User</option>
+              <option value="asset_return">Asset Return</option>
               <option value="employee">Employee</option>
+              <option value="user">User</option>
+              <option value="maintenance">Maintenance</option>
             </select>
 
             <div>
@@ -523,7 +589,7 @@ export default function ActivityLogsPage() {
                 <thead className="bg-gray-50 text-gray-600">
                   <tr>
                     <th className="px-4 py-3">Date & Time</th>
-                    <th className="px-4 py-3">Admin</th>
+                    <th className="px-4 py-3">Performed By</th>
                     <th className="px-4 py-3">Action</th>
                     <th className="px-4 py-3">Entity</th>
                     <th className="px-4 py-3">Entity ID</th>
@@ -542,6 +608,7 @@ export default function ActivityLogsPage() {
                         <p className="font-semibold text-gray-900">
                           {log.actor?.name || "Deleted User"}
                         </p>
+
                         {log.actor?.email && (
                           <p className="mt-1 text-xs text-gray-500">
                             {log.actor.email}
@@ -558,7 +625,7 @@ export default function ActivityLogsPage() {
                       </td>
 
                       <td className="px-4 py-4 capitalize text-gray-700">
-                        {log.entityType}
+                        {log.entityType.replaceAll("_", " ")}
                       </td>
 
                       <td className="px-4 py-4 font-medium text-gray-700">
