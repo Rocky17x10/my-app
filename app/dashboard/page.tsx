@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AdminNavigation from '../components/AdminNavigation';
-import NotificationBell from '../components/NotificationBell';
 
 type UserRole = 'super_admin' | 'admin' | 'user';
 
@@ -95,7 +94,6 @@ export default function DashboardPage() {
           setStatisticsLoading(true);
         }
 
-        // Load live dashboard statistics
         try {
           const statsResponse = await fetch(
             'http://localhost:3001/dashboard/statistics',
@@ -153,11 +151,6 @@ export default function DashboardPage() {
     };
   }, [router]);
 
-  function handleLogout() {
-    sessionStorage.removeItem('access_token');
-    router.replace('/login');
-  }
-
   if (loading) {
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center p-6 text-gray-800">
@@ -179,7 +172,6 @@ export default function DashboardPage() {
   }
 
   const isSuperAdmin = profile.role === 'super_admin';
-
   const summary = statistics?.summary;
 
   const statCards = [
@@ -292,20 +284,6 @@ export default function DashboardPage() {
               <p className="text-sm text-gray-500 mt-1">
                 Welcome, {profile.name || profile.email}!
               </p>
-            </div>
-
-            {/* Notification Bell and Logout */}
-            <div className="flex items-center gap-3">
-              <NotificationBell
-                ticketHref="/support-center/tickets"
-              />
-
-              <button
-                onClick={handleLogout}
-                className="rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700"
-              >
-                Logout
-              </button>
             </div>
           </div>
 

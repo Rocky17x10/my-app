@@ -1,10 +1,12 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import AdminNavigation from '../components/AdminNavigation';
 import NotificationBell from '../components/NotificationBell';
+
+const API_URL = 'http://localhost:3001';
 
 type UserRole = 'super_admin' | 'admin' | 'user';
 
@@ -17,14 +19,23 @@ type User = {
   role: UserRole;
 };
 
-const API_URL = 'http://localhost:3001';
+type Profile = {
+  id?: number;
+  userId?: number;
+  role: UserRole;
+  user?: {
+    id?: number;
+    userId?: number;
+    role: UserRole;
+  };
+};
 
-function getAuthHeaders(): HeadersInit {
+function getAuthHeaders(): Record<string, string> {
   const token = sessionStorage.getItem('access_token');
 
   if (!token) {
-    window.location.assign('/login');
-    throw new Error('Please log in again.');
+    window.location.replace('/login');
+    return {};
   }
 
   return {
@@ -32,32 +43,27 @@ function getAuthHeaders(): HeadersInit {
   };
 }
 
-async function getErrorMessage(
-  response: Response,
-  fallback: string,
-): Promise<string> {
-  const result = await response.json().catch(() => null);
-
-  if (response.status === 401) {
+function getErrorMessage(data: any, status: number): string {
+  if (status === 401) {
     sessionStorage.removeItem('access_token');
-    window.location.assign('/login');
+    window.location.replace('/login');
     return 'Your session has expired. Please log in again.';
   }
 
-  if (response.status === 403) {
+  if (status === 403) {
     return 'You do not have permission to perform this action.';
   }
 
-  if (result?.message) {
-    return Array.isArray(result.message)
-      ? result.message.join(', ')
-      : result.message;
+  if (data?.message) {
+    return Array.isArray(data.message)
+      ? data.message.join(', ')
+      : data.message;
   }
 
-  return `${fallback} (HTTP ${response.status})`;
+  return `Request failed with status ${status}.`;
 }
 
-function roleLabel(role: UserRole) {
+function roleLabel(role: UserRole): string {
   switch (role) {
     case 'super_admin':
       return 'Super Admin';
@@ -91,11 +97,17 @@ export default function UsersPage() {
   const [designation, setDesignation] = useState('');
 
   const [editingId, setEditingId] = useState<number | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [changingRoleId, setChangingRoleId] = useState<number | null>(null);
+
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
+  const isSuperAdmin = currentRole === 'super_admin';
+
+  // Load employees and authenticated profile
   async function fetchUsers() {
     setLoading(true);
     setError('');
@@ -108,32 +120,41 @@ export default function UsersPage() {
         fetch(`${API_URL}/auth/profile`, { headers }),
       ]);
 
+      const usersData = await usersResponse.json().catch(() => []);
+      const profileData: Profile | any = await profileResponse
+        .json()
+        .catch(() => ({}));
+
       if (!usersResponse.ok) {
         throw new Error(
-          await getErrorMessage(usersResponse, 'Could not load employees.'),
+          getErrorMessage(usersData, usersResponse.status),
         );
       }
 
       if (!profileResponse.ok) {
         throw new Error(
-          await getErrorMessage(profileResponse, 'Could not load your profile.'),
+          getErrorMessage(profileData, profileResponse.status),
         );
       }
 
-      const usersData = await usersResponse.json();
-      const profileData = await profileResponse.json();
+      // Backend profile may return { message, user: {...} }
+      // or a direct profile object.
+      const authenticatedUser = profileData.user ?? profileData;
 
       setUsers(Array.isArray(usersData) ? usersData : []);
 
-      const profileUser = profileData.user || profileData;
+      setCurrentRole(authenticatedUser.role ?? null);
 
-      setCurrentRole(profileUser.role || null);
-      setCurrentUserId(profileUser.id || profileUser.userId || null);
+      setCurrentUserId(
+        authenticatedUser.id ??
+        authenticatedUser.userId ??
+        null,
+      );
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : 'Unable to load employees from backend.',
+          : 'Unable to load employees.',
       );
     } finally {
       setLoading(false);
@@ -144,6 +165,13 @@ export default function UsersPage() {
     void fetchUsers();
   }, []);
 
+  // Logout
+  function handleLogout() {
+    sessionStorage.removeItem('access_token');
+    window.location.replace('/login');
+  }
+
+  // Reset employee form
   function resetForm() {
     setName('');
     setEmail('');
@@ -153,55 +181,81 @@ export default function UsersPage() {
     setEditingId(null);
   }
 
+  // Load existing employee information into the form
   function startEditing(user: User) {
     if (user.role === 'super_admin') {
       setError('The Super Admin account cannot be edited.');
       return;
     }
 
-    setEditingId(user.id);
-    setName(user.name);
-    setEmail(user.email);
-    setPassword('');
-    setDepartment(user.department || '');
-    setDesignation(user.designation || '');
     setMessage('');
     setError('');
 
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Fill the form using the existing employee row data.
+    setEditingId(user.id);
+    setName(user.name ?? '');
+    setEmail(user.email ?? '');
+    setDepartment(user.department ?? '');
+    setDesignation(user.designation ?? '');
+    setPassword('');
+
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    });
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  // Create or update employee
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    setSaving(true);
     setMessage('');
     setError('');
 
+    if (!name.trim() || !email.trim()) {
+      setError('Name and email are required.');
+      return;
+    }
+
+    if (!editingId && !password.trim()) {
+      setError('Password is required for a new employee.');
+      return;
+    }
+
+    setSaving(true);
+
     try {
-      const headers = getAuthHeaders();
+      const headers = {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      };
 
-      const url = editingId
-        ? `${API_URL}/users/${editingId}`
-        : `${API_URL}/users`;
+      const body: Record<string, string> = {
+        name: name.trim(),
+        email: email.trim(),
+        department: department.trim(),
+        designation: designation.trim(),
+      };
 
-      const body = editingId
-        ? { name, email, department, designation }
-        : { name, email, password, department, designation };
+      if (!editingId) {
+        body.password = password;
+      }
 
-      const response = await fetch(url, {
-        method: editingId ? 'PATCH' : 'POST',
-        headers: {
-          ...headers,
-          'Content-Type': 'application/json',
+      const response = await fetch(
+        editingId
+          ? `${API_URL}/users/${editingId}`
+          : `${API_URL}/users`,
+        {
+          method: editingId ? 'PATCH' : 'POST',
+          headers,
+          body: JSON.stringify(body),
         },
-        body: JSON.stringify(body),
-      });
+      );
+
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(
-          await getErrorMessage(response, 'Could not save employee.'),
-        );
+        throw new Error(getErrorMessage(data, response.status));
       }
 
       setMessage(
@@ -214,20 +268,23 @@ export default function UsersPage() {
       await fetchUsers();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'Something went wrong.',
+        err instanceof Error
+          ? err.message
+          : 'Unable to save employee.',
       );
     } finally {
       setSaving(false);
     }
   }
 
+  // Delete employee
   async function handleDelete(user: User) {
     if (user.role === 'super_admin') {
       setError('The Super Admin account cannot be deleted.');
       return;
     }
 
-    if (!window.confirm(`Delete employee "${user.name}"?`)) {
+    if (!window.confirm(`Are you sure you want to delete ${user.name}?`)) {
       return;
     }
 
@@ -235,34 +292,42 @@ export default function UsersPage() {
     setError('');
 
     try {
-      const headers = getAuthHeaders();
+      const response = await fetch(
+        `${API_URL}/users/${user.id}`,
+        {
+          method: 'DELETE',
+          headers: getAuthHeaders(),
+        },
+      );
 
-      const response = await fetch(`${API_URL}/users/${user.id}`, {
-        method: 'DELETE',
-        headers,
-      });
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(
-          await getErrorMessage(response, 'Could not delete employee.'),
-        );
+        throw new Error(getErrorMessage(data, response.status));
       }
+
+      setMessage('Employee deleted successfully.');
 
       if (editingId === user.id) {
         resetForm();
       }
 
-      setMessage('Employee deleted successfully.');
       await fetchUsers();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'Something went wrong.',
+        err instanceof Error
+          ? err.message
+          : 'Unable to delete employee.',
       );
     }
   }
 
-  async function handleRoleChange(user: User, newRole: 'admin' | 'user') {
-    if (currentRole !== 'super_admin') {
+  // Change employee role
+  async function handleRoleChange(
+    user: User,
+    newRole: UserRole,
+  ) {
+    if (!isSuperAdmin) {
       setError('Only the Super Admin can change employee roles.');
       return;
     }
@@ -281,325 +346,387 @@ export default function UsersPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      `Change ${user.name}'s role from ${roleLabel(user.role)} to ${roleLabel(newRole)}?`,
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
     setMessage('');
     setError('');
+    setChangingRoleId(user.id);
 
     try {
-      const headers = getAuthHeaders();
-
-      const response = await fetch(`${API_URL}/users/${user.id}/role`, {
-        method: 'PATCH',
-        headers: {
-          ...headers,
-          'Content-Type': 'application/json',
+      const response = await fetch(
+        `${API_URL}/users/${user.id}/role`,
+        {
+          method: 'PATCH',
+          headers: {
+            ...getAuthHeaders(),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ role: newRole }),
         },
-        body: JSON.stringify({ role: newRole }),
-      });
+      );
+
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(
-          await getErrorMessage(response, 'Could not change employee role.'),
-        );
+        throw new Error(getErrorMessage(data, response.status));
       }
 
-      setMessage(`${user.name}'s role changed to ${roleLabel(newRole)}.`);
+      setMessage(`Role updated for ${user.name}.`);
+
       await fetchUsers();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'Could not change employee role.',
+        err instanceof Error
+          ? err.message
+          : 'Unable to update employee role.',
       );
+    } finally {
+      setChangingRoleId(null);
     }
   }
 
   return (
-    <main className="min-h-screen bg-gray-100 p-4 text-gray-900 sm:p-8">
+    <main className="min-h-screen bg-gray-100 p-4 md:p-8">
       <div className="mx-auto max-w-7xl">
 
-        {/* Shared navigation and notification bell */}
+        {/* Header, notification and logout */}
         <div className="mb-8 rounded-xl bg-white p-4 shadow-sm">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h1 className="text-xl font-bold">IT Inventory System</h1>
+            <h1 className="text-xl font-bold text-gray-900">
+              IT Inventory System
+            </h1>
 
-            <NotificationBell ticketHref="/support-center/tickets" />
+            <div className="flex shrink-0 items-center gap-3">
+              <NotificationBell ticketHref="/support-center/tickets" />
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="flex h-11 items-center justify-center rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-700 hover:bg-red-100"
+              >
+                Logout
+              </button>
+            </div>
           </div>
 
           <AdminNavigation activeTab="users" />
         </div>
 
-        <header className="mb-6">
-          <h2 className="text-3xl font-bold">User Management</h2>
-          <p className="mt-2 text-gray-600">
-            Create, update, and manage employee records and roles.
-          </p>
+        {/* Page heading */}
+        <div className="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">
+              User Management
+            </h2>
+
+            <p className="mt-1 text-sm text-gray-600">
+              Manage employees, departments and user roles.
+            </p>
+          </div>
 
           {currentRole && (
-            <p className="mt-3 text-sm text-gray-600">
-              Your account role:{' '}
-              <span
-                className={`rounded-full px-3 py-1 font-semibold ${roleStyle(currentRole)}`}
-              >
-                {roleLabel(currentRole)}
-              </span>
-            </p>
+            <span
+              className={`w-fit rounded-full px-4 py-2 text-sm font-semibold ${roleStyle(currentRole)}`}
+            >
+              Logged in as: {roleLabel(currentRole)}
+            </span>
           )}
-        </header>
+        </div>
 
+        {/* Success message */}
         {message && (
-          <p className="mb-4 rounded-lg bg-green-100 p-3 text-green-800">
+          <div className="mb-5 rounded-lg border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-800">
             {message}
-          </p>
+          </div>
         )}
 
+        {/* Error message */}
         {error && (
-          <p className="mb-4 rounded-lg bg-red-100 p-3 text-red-800">
+          <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">
             {error}
-          </p>
+          </div>
         )}
 
-        <section className="mb-8 rounded-xl bg-white p-6 shadow-sm">
-          <h3 className="mb-5 text-xl font-semibold">
-            {editingId ? 'Edit Employee' : 'Add New Employee'}
-          </h3>
+        {/* Employee form */}
+        <section className="mb-8 rounded-xl bg-white p-5 shadow-sm md:p-6">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <h3 className="text-lg font-bold text-gray-900">
+              {editingId ? 'Edit Employee' : 'Add New Employee'}
+            </h3>
 
-          <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="name" className="mb-1 block text-sm font-medium">
-                Full Name
-              </label>
-              <input
-                id="name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                required
-                maxLength={100}
-                className="w-full rounded-lg border border-gray-300 p-3 outline-none focus:border-blue-500"
-                placeholder="Enter full name"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="email" className="mb-1 block text-sm font-medium">
-                Email Address
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-                maxLength={150}
-                className="w-full rounded-lg border border-gray-300 p-3 outline-none focus:border-blue-500"
-                placeholder="user@example.com"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="department"
-                className="mb-1 block text-sm font-medium"
+            {editingId && (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
-                Department
-              </label>
-              <input
-                id="department"
-                value={department}
-                onChange={(event) => setDepartment(event.target.value)}
-                maxLength={100}
-                className="w-full rounded-lg border border-gray-300 p-3 outline-none focus:border-blue-500"
-                placeholder="e.g. IT, HR, Finance"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="designation"
-                className="mb-1 block text-sm font-medium"
-              >
-                Designation
-              </label>
-              <input
-                id="designation"
-                value={designation}
-                onChange={(event) => setDesignation(event.target.value)}
-                maxLength={100}
-                className="w-full rounded-lg border border-gray-300 p-3 outline-none focus:border-blue-500"
-                placeholder="e.g. IT Officer, Manager"
-              />
-            </div>
-
-            {!editingId && (
-              <div className="sm:col-span-2">
-                <label
-                  htmlFor="password"
-                  className="mb-1 block text-sm font-medium"
-                >
-                  Password
-                </label>
-                <input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  required
-                  minLength={8}
-                  maxLength={72}
-                  autoComplete="new-password"
-                  className="w-full rounded-lg border border-gray-300 p-3 outline-none focus:border-blue-500"
-                  placeholder="At least 8 characters"
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                  Password is required when creating an employee. Editing
-                  an employee does not change their password.
-                </p>
-              </div>
+                Cancel Editing
+              </button>
             )}
+          </div>
 
-            <div className="flex flex-wrap gap-3 sm:col-span-2">
+          <form onSubmit={handleSubmit}>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="employee-name"
+                  className="mb-1 block text-sm font-medium text-gray-700"
+                >
+                  Full Name
+                </label>
+
+                <input
+                  id="employee-name"
+                  type="text"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Enter full name"
+                  required
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="employee-email"
+                  className="mb-1 block text-sm font-medium text-gray-700"
+                >
+                  Email Address
+                </label>
+
+                <input
+                  id="employee-email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="Enter email address"
+                  required
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="employee-department"
+                  className="mb-1 block text-sm font-medium text-gray-700"
+                >
+                  Department
+                </label>
+
+                <input
+                  id="employee-department"
+                  type="text"
+                  value={department}
+                  onChange={(event) => setDepartment(event.target.value)}
+                  placeholder="Enter department"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="employee-designation"
+                  className="mb-1 block text-sm font-medium text-gray-700"
+                >
+                  Designation
+                </label>
+
+                <input
+                  id="employee-designation"
+                  type="text"
+                  value={designation}
+                  onChange={(event) => setDesignation(event.target.value)}
+                  placeholder="Enter designation"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+
+              {!editingId && (
+                <div className="md:col-span-2">
+                  <label
+                    htmlFor="employee-password"
+                    className="mb-1 block text-sm font-medium text-gray-700"
+                  >
+                    Password
+                  </label>
+
+                  <input
+                    id="employee-password"
+                    type="password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Enter initial password"
+                    required
+                    minLength={6}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-3">
               <button
                 type="submit"
                 disabled={saving}
-                className="rounded-lg bg-blue-600 px-5 py-3 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving
                   ? 'Saving...'
                   : editingId
                     ? 'Update Employee'
-                    : 'Create Employee'}
+                    : 'Add Employee'}
               </button>
 
-              {editingId !== null && (
+              {editingId && (
                 <button
                   type="button"
                   onClick={resetForm}
-                  className="rounded-lg border border-gray-300 px-5 py-3 font-medium hover:bg-gray-100"
+                  className="rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
                 >
-                  Cancel Edit
+                  Cancel
                 </button>
               )}
             </div>
           </form>
         </section>
 
-        <section className="rounded-xl bg-white p-6 shadow-sm">
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        {/* Employees table */}
+        <section className="rounded-xl bg-white p-5 shadow-sm md:p-6">
+          <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
             <div>
-              <h3 className="text-xl font-semibold">Employees</h3>
+              <h3 className="text-lg font-bold text-gray-900">
+                Employees
+              </h3>
+
               <p className="mt-1 text-sm text-gray-500">
-                {users.length} employee records
+                Total employees: {users.length}
               </p>
             </div>
 
             <button
               type="button"
               onClick={() => void fetchUsers()}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm hover:bg-gray-100"
+              disabled={loading}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
             >
-              Refresh
+              {loading ? 'Refreshing...' : 'Refresh'}
             </button>
           </div>
 
           {loading ? (
-            <p className="py-6 text-gray-500">Loading employees...</p>
+            <div className="py-10 text-center text-sm text-gray-500">
+              Loading employees...
+            </div>
           ) : users.length === 0 ? (
-            <p className="py-6 text-gray-500">No employees found.</p>
+            <div className="py-10 text-center text-sm text-gray-500">
+              No employees found.
+            </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1250px] text-left text-sm">
+              <table className="w-full min-w-[1000px] border-collapse text-left text-sm">
                 <thead>
-                  <tr className="border-b bg-gray-50 text-gray-600">
-                    <th className="p-3">ID</th>
-                    <th className="p-3">Name</th>
-                    <th className="p-3">Email</th>
-                    <th className="p-3">Department</th>
-                    <th className="p-3">Designation</th>
-                    <th className="p-3">Role</th>
-                    <th className="p-3">Assignment History</th>
-                    <th className="p-3">Actions</th>
+                  <tr className="border-b border-gray-200 bg-gray-50 text-gray-600">
+                    <th className="px-4 py-3 font-semibold">ID</th>
+                    <th className="px-4 py-3 font-semibold">Name</th>
+                    <th className="px-4 py-3 font-semibold">Email</th>
+                    <th className="px-4 py-3 font-semibold">Department</th>
+                    <th className="px-4 py-3 font-semibold">Designation</th>
+                    <th className="px-4 py-3 font-semibold">Role</th>
+                    <th className="px-4 py-3 font-semibold">History</th>
+                    <th className="px-4 py-3 font-semibold">Actions</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {users.map((user) => {
-                    const isSuperAdmin = user.role === 'super_admin';
+                    const isProtected = user.role === 'super_admin';
                     const isCurrentUser = user.id === currentUserId;
 
                     return (
-                      <tr key={user.id} className="border-b last:border-0">
-                        <td className="p-3">{user.id}</td>
+                      <tr
+                        key={user.id}
+                        className="border-b border-gray-100 hover:bg-gray-50"
+                      >
+                        <td className="px-4 py-3 text-gray-600">
+                          {user.id}
+                        </td>
 
-                        <td className="p-3 font-medium">
+                        <td className="px-4 py-3 font-medium text-gray-900">
                           {user.name}
+
                           {isCurrentUser && (
-                            <span className="ml-2 text-xs text-gray-500">
+                            <span className="ml-2 text-xs text-blue-600">
                               (You)
                             </span>
                           )}
                         </td>
 
-                        <td className="p-3">{user.email}</td>
+                        <td className="px-4 py-3 text-gray-600">
+                          {user.email}
+                        </td>
 
-                        <td className="p-3">
+                        <td className="px-4 py-3 text-gray-600">
                           {user.department || '-'}
                         </td>
 
-                        <td className="p-3">
+                        <td className="px-4 py-3 text-gray-600">
                           {user.designation || '-'}
                         </td>
 
-                        <td className="p-3">
-                          <span
-                            className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${roleStyle(user.role)}`}
-                          >
-                            {roleLabel(user.role)}
-                          </span>
-
-                          {currentRole === 'super_admin' &&
-                            !isSuperAdmin &&
-                            !isCurrentUser && (
-                              <select
-                                value={user.role}
-                                onChange={(event) =>
-                                  void handleRoleChange(
-                                    user,
-                                    event.target.value as 'admin' | 'user',
-                                  )
-                                }
-                                className="mt-2 block rounded-md border border-gray-300 p-2 text-xs"
+                        <td className="px-4 py-3">
+                          {isSuperAdmin && !isProtected && !isCurrentUser ? (
+                            <select
+                              value={user.role}
+                              disabled={changingRoleId === user.id}
+                              onChange={(event) =>
+                                void handleRoleChange(
+                                  user,
+                                  event.target.value as UserRole,
+                                )
+                              }
+                              className="rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 outline-none focus:border-blue-500 disabled:cursor-wait disabled:opacity-60"
+                            >
+                              <option
+                                className="bg-white text-gray-900"
+                                value="user"
                               >
-                                <option value="user">User</option>
-                                <option value="admin">Admin</option>
-                              </select>
-                            )}
+                                User
+                              </option>
+
+                              <option
+                                className="bg-white text-gray-900"
+                                value="admin"
+                              >
+                                Admin
+                              </option>
+                            </select>
+                          ) : (
+                            <span
+                              className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${roleStyle(user.role)}`}
+                            >
+                              {roleLabel(user.role)}
+                            </span>
+                          )}
                         </td>
 
-                        <td className="p-3">
+                        <td className="px-4 py-3">
                           <Link
                             href={`/users/${user.id}/history`}
-                            className="inline-block whitespace-nowrap rounded-md bg-purple-100 px-3 py-2 text-xs font-semibold text-purple-800 hover:bg-purple-200"
+                            className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
                           >
                             View History
                           </Link>
                         </td>
 
-                        <td className="p-3">
-                          {isSuperAdmin ? (
-                            <span className="text-xs text-gray-500">
-                              Protected account
+                        <td className="px-4 py-3">
+                          {isProtected ? (
+                            <span className="text-xs font-medium text-gray-400">
+                              Protected
                             </span>
                           ) : (
-                            <div className="flex gap-2">
+                            <div className="flex items-center gap-3">
                               <button
                                 type="button"
                                 onClick={() => startEditing(user)}
-                                className="rounded-md bg-amber-100 px-3 py-2 text-amber-800 hover:bg-amber-200"
+                                className="font-semibold text-blue-600 hover:text-blue-800"
                               >
                                 Edit
                               </button>
@@ -607,7 +734,7 @@ export default function UsersPage() {
                               <button
                                 type="button"
                                 onClick={() => void handleDelete(user)}
-                                className="rounded-md bg-red-100 px-3 py-2 text-red-700 hover:bg-red-200"
+                                className="font-semibold text-red-600 hover:text-red-800"
                               >
                                 Delete
                               </button>
@@ -623,9 +750,9 @@ export default function UsersPage() {
           )}
         </section>
 
-        <p className="mt-6 text-center text-xs text-gray-400">
+        <footer className="mt-8 pb-4 text-center text-sm text-gray-500">
           IT Inventory Management System
-        </p>
+        </footer>
       </div>
     </main>
   );
