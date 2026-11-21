@@ -13,6 +13,7 @@ type User = {
   department: string | null;
   designation: string | null;
   role: UserRole;
+  isActive: boolean;
 };
 
 import { apiFetch } from '@/lib/api';
@@ -28,7 +29,7 @@ async function getErrorMessage(
     return 'Your session has expired. Please log in again.';
   }
 
-  if (response.status === 403) {
+  if (response.status === 403 && typeof result?.message !== 'string') {
     return 'You do not have permission to perform this action.';
   }
 
@@ -288,6 +289,40 @@ export default function UsersPage() {
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'Could not change employee role.',
+      );
+    }
+  }
+
+  async function handleSetActive(user: User, active: boolean) {
+    if (
+      !active &&
+      !window.confirm(
+        `Deactivate "${user.name}"? They are logged out and cannot log in until reactivated. Their history is kept.`,
+      )
+    ) {
+      return;
+    }
+
+    setMessage('');
+    setError('');
+
+    try {
+      const response = await apiFetch(`/auth/users/${user.id}/active`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active }),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          await getErrorMessage(response, 'Could not change the account status.'),
+        );
+      }
+
+      setMessage(`${user.name} is now ${active ? 'active' : 'deactivated'}.`);
+      await fetchUsers();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Could not change the account status.',
       );
     }
   }
@@ -556,6 +591,12 @@ export default function UsersPage() {
                   {users.map((user) => {
                     const isSuperAdmin = user.role === 'super_admin';
                     const isCurrentUser = user.id === currentUserId;
+                    // Mirrors the API rule (accountChangeDenied): admins manage employees,
+                    // only the Super Admin manages admins, nobody manages their own account here.
+                    const canManage =
+                      !isSuperAdmin &&
+                      !isCurrentUser &&
+                      (user.role === 'user' || currentRole === 'super_admin');
 
                     return (
                       <tr key={user.id} className="border-b last:border-0">
@@ -566,6 +607,11 @@ export default function UsersPage() {
                           {isCurrentUser && (
                             <span className="ml-2 text-xs text-gray-500">
                               (You)
+                            </span>
+                          )}
+                          {!user.isActive && (
+                            <span className="ml-2 rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-700">
+                              Deactivated
                             </span>
                           )}
                         </td>
@@ -616,9 +662,13 @@ export default function UsersPage() {
                         </td>
 
                         <td className="p-3">
-                          {isSuperAdmin ? (
+                          {!canManage ? (
                             <span className="text-xs text-gray-500">
-                              Protected account
+                              {isSuperAdmin
+                                ? 'Protected account'
+                                : isCurrentUser
+                                  ? 'Your account'
+                                  : 'Managed by the Super Admin'}
                             </span>
                           ) : (
                             <div className="flex gap-2">
@@ -630,17 +680,21 @@ export default function UsersPage() {
                                 Edit
                               </button>
 
-                              {user.id !== currentUserId &&
-                                (user.role === 'user' ||
-                                  currentRole === 'super_admin') && (
-                                  <button
-                                    type="button"
-                                    onClick={() => void handleResetPassword(user)}
-                                    className="whitespace-nowrap rounded-md bg-slate-100 px-3 py-2 text-slate-800 hover:bg-slate-200"
-                                  >
-                                    Reset password
-                                  </button>
-                                )}
+                              <button
+                                type="button"
+                                onClick={() => void handleResetPassword(user)}
+                                className="whitespace-nowrap rounded-md bg-slate-100 px-3 py-2 text-slate-800 hover:bg-slate-200"
+                              >
+                                Reset password
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => void handleSetActive(user, !user.isActive)}
+                                className="rounded-md bg-gray-100 px-3 py-2 text-gray-800 hover:bg-gray-200"
+                              >
+                                {user.isActive ? 'Deactivate' : 'Activate'}
+                              </button>
 
                               <button
                                 type="button"

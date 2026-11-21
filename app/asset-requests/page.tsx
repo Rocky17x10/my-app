@@ -195,7 +195,12 @@ export default function AssetRequestsPage() {
       }
 
       if (response.status === 403) {
-        throw new Error("You are not authorized to review requests.");
+        // e.g. "You cannot review your own request."
+        throw new Error(
+          typeof data.message === "string"
+            ? data.message
+            : "You are not authorized to review requests."
+        );
       }
 
       if (!response.ok) {

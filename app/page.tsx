@@ -13,6 +13,7 @@ type User = {
   department?: string | null;
   designation?: string | null;
   role?: string;
+  isActive?: boolean;
 };
 
 type AssetStatus = 'available' | 'assigned' | 'maintenance' | 'retired';
@@ -125,7 +126,7 @@ async function getResponseError(
     return 'Your session has expired. Please log in again.';
   }
 
-  if (response.status === 403) {
+  if (response.status === 403 && typeof errorData?.message !== 'string') {
     return 'You do not have permission to perform this action.';
   }
 
@@ -142,6 +143,7 @@ export default function DashboardPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [currentRole, setCurrentRole] = useState('');
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [assetSearch, setAssetSearch] = useState('');
@@ -206,6 +208,7 @@ export default function DashboardPage() {
         '';
 
       setCurrentRole(role);
+      setCurrentUserId(profileData.user?.userId ?? null);
       setAssets(Array.isArray(assetsData) ? assetsData : []);
 
       // Only administrators need the employee list.
@@ -433,6 +436,9 @@ export default function DashboardPage() {
 
   // Employee search.
   const filteredUsers = users.filter((user) => {
+    // The API refuses self-assignment and deactivated accounts.
+    if (user.id === currentUserId || user.isActive === false) return false;
+
     const search = employeeSearch.trim().toLowerCase();
 
     if (!search) return true;
