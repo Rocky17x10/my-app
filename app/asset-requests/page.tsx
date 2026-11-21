@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { API_URL } from '@/lib/config';
+import { apiFetch, logout } from '@/lib/api';
 
 type RequestStatus = "pending" | "approved" | "rejected";
 
@@ -56,19 +56,14 @@ export default function AssetRequestsPage() {
   const [adminNote, setAdminNote] = useState("");
   const [reviewingId, setReviewingId] = useState<number | null>(null);
 
-  const getToken = () => sessionStorage.getItem("access_token");
 
   const loadRequests = useCallback(
-    async (token: string) => {
-      const response = await fetch(`${API_URL}/asset-requests`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+    async () => {
+      const response = await apiFetch(`/asset-requests`, {
         cache: "no-store",
       });
 
       if (response.status === 401) {
-        sessionStorage.removeItem("access_token");
         router.push("/login");
         return;
       }
@@ -90,26 +85,16 @@ export default function AssetRequestsPage() {
 
   useEffect(() => {
     const loadPage = async () => {
-      const token = getToken();
-
-      if (!token) {
-        router.push("/login");
-        return;
-      }
 
       try {
-        const profileResponse = await fetch(
-          `${API_URL}/auth/profile`,
+        const profileResponse = await apiFetch(
+          `/auth/profile`,
           {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
             cache: "no-store",
           }
         );
 
         if (!profileResponse.ok) {
-          sessionStorage.removeItem("access_token");
           router.push("/login");
           return;
         }
@@ -126,7 +111,7 @@ export default function AssetRequestsPage() {
         }
 
         setProfile(currentUser);
-        await loadRequests(token);
+        await loadRequests();
       } catch (err) {
         setError(
           err instanceof Error
@@ -185,26 +170,16 @@ export default function AssetRequestsPage() {
   const handleReview = async (status: "approved" | "rejected") => {
     if (!selectedRequest || selectedRequest.status !== "pending") return;
 
-    const token = getToken();
-
-    if (!token) {
-      router.push("/login");
-      return;
-    }
 
     setError("");
     setSuccess("");
     setReviewingId(selectedRequest.id);
 
     try {
-      const response = await fetch(
-        `${API_URL}/asset-requests/${selectedRequest.id}/review`,
+      const response = await apiFetch(
+        `/asset-requests/${selectedRequest.id}/review`,
         {
           method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
           body: JSON.stringify({
             status,
             adminNote: adminNote.trim(),
@@ -215,7 +190,6 @@ export default function AssetRequestsPage() {
       const data = await response.json().catch(() => ({}));
 
       if (response.status === 401) {
-        sessionStorage.removeItem("access_token");
         router.push("/login");
         return;
       }
@@ -274,8 +248,8 @@ export default function AssetRequestsPage() {
     setAdminNote("");
   };
 
-  const handleLogout = () => {
-    sessionStorage.removeItem("access_token");
+  const handleLogout = async () => {
+    await logout();
     router.push("/login");
   };
 
@@ -424,15 +398,11 @@ export default function AssetRequestsPage() {
 
             <button
               onClick={() => {
-                const token = getToken();
-
-                if (token) {
-                  setError("");
-                  setSuccess("");
-                  loadRequests(token).catch((err) =>
-                    setError(err.message || "Refresh failed.")
-                  );
-                }
+                setError("");
+                setSuccess("");
+                loadRequests().catch((err) =>
+                  setError(err.message || "Refresh failed.")
+                );
               }}
               className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >

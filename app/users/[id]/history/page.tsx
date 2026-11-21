@@ -5,7 +5,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 
-import { API_URL } from '@/lib/config';
+import { apiFetch } from '@/lib/api';
 
 type HistoryRecord = {
   id: number;
@@ -49,24 +49,10 @@ function EmployeeHistoryPageContent() {
   useEffect(() => {
     async function loadHistory() {
       try {
-        const token = sessionStorage.getItem('access_token');
 
-        if (!token) {
-          window.location.assign('/login');
-          return;
-        }
-
-        const response = await fetch(
-          `${API_URL}/assets/history/employee/${employeeId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
-        );
+        const response = await apiFetch(`/assets/history/employee/${employeeId}`);
 
         if (response.status === 401) {
-          sessionStorage.removeItem('access_token');
           window.location.assign('/login');
           return;
         }

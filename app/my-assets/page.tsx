@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { API_URL } from '@/lib/config';
+import { apiFetch, logout } from '@/lib/api';
 
 interface Asset {
   id: number;
@@ -42,23 +42,12 @@ export default function MyAssetsPage() {
 
   useEffect(() => {
     const loadMyAssets = async () => {
-      const token = sessionStorage.getItem("access_token");
-
-      if (!token) {
-        router.replace("/login");
-        return;
-      }
 
       try {
-        const profileResponse = await fetch(`${API_URL}/auth/profile`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const profileResponse = await apiFetch(`/auth/profile`);
 
         if (!profileResponse.ok) {
           if (profileResponse.status === 401) {
-            sessionStorage.removeItem("access_token");
             router.replace("/login");
             return;
           }
@@ -79,15 +68,10 @@ export default function MyAssetsPage() {
 
         setProfile(currentUser);
 
-        const assetsResponse = await fetch(`${API_URL}/assets`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const assetsResponse = await apiFetch(`/assets`);
 
         if (!assetsResponse.ok) {
           if (assetsResponse.status === 401) {
-            sessionStorage.removeItem("access_token");
             router.replace("/login");
             return;
           }
@@ -158,8 +142,8 @@ export default function MyAssetsPage() {
     }
   };
 
-  const logout = () => {
-    sessionStorage.removeItem("access_token");
+  const handleLogout = async () => {
+    await logout();
     router.replace("/login");
   };
 
@@ -200,7 +184,7 @@ export default function MyAssetsPage() {
             </button>
 
             <button
-              onClick={logout}
+              onClick={handleLogout}
               className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg"
             >
               Logout

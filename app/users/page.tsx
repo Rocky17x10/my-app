@@ -15,20 +15,7 @@ type User = {
   role: UserRole;
 };
 
-import { API_URL } from '@/lib/config';
-
-function getAuthHeaders(): HeadersInit {
-  const token = sessionStorage.getItem('access_token');
-
-  if (!token) {
-    window.location.assign('/login');
-    throw new Error('Please log in again.');
-  }
-
-  return {
-    Authorization: `Bearer ${token}`,
-  };
-}
+import { apiFetch } from '@/lib/api';
 
 async function getErrorMessage(
   response: Response,
@@ -37,7 +24,6 @@ async function getErrorMessage(
   const result = await response.json().catch(() => null);
 
   if (response.status === 401) {
-    sessionStorage.removeItem('access_token');
     window.location.assign('/login');
     return 'Your session has expired. Please log in again.';
   }
@@ -99,11 +85,10 @@ export default function UsersPage() {
     setError('');
 
     try {
-      const headers = getAuthHeaders();
 
       const [usersResponse, profileResponse] = await Promise.all([
-        fetch(`${API_URL}/users`, { headers }),
-        fetch(`${API_URL}/auth/profile`, { headers }),
+        apiFetch(`/users`),
+        apiFetch(`/auth/profile`),
       ]);
 
       if (!usersResponse.ok) {
@@ -139,7 +124,7 @@ export default function UsersPage() {
   }
 
   useEffect(() => {
-    // shortcut: fetchUsers sets state before its first await (loading reset; catch path when the token is missing). Replace with the shared API client + data hook in Phase 5.
+    // shortcut: fetchUsers sets state before its first await (loading reset). Replace with a data hook in Phase 5.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchUsers();
   }, []);
@@ -179,22 +164,17 @@ export default function UsersPage() {
     setError('');
 
     try {
-      const headers = getAuthHeaders();
 
       const url = editingId
-        ? `${API_URL}/users/${editingId}`
-        : `${API_URL}/users`;
+        ? `/users/${editingId}`
+        : `/users`;
 
       const body = editingId
         ? { name, email, department, designation }
         : { name, email, password, department, designation };
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: editingId ? 'PATCH' : 'POST',
-        headers: {
-          ...headers,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(body),
       });
 
@@ -235,11 +215,9 @@ export default function UsersPage() {
     setError('');
 
     try {
-      const headers = getAuthHeaders();
 
-      const response = await fetch(`${API_URL}/users/${user.id}`, {
+      const response = await apiFetch(`/users/${user.id}`, {
         method: 'DELETE',
-        headers,
       });
 
       if (!response.ok) {
@@ -293,14 +271,9 @@ export default function UsersPage() {
     setError('');
 
     try {
-      const headers = getAuthHeaders();
 
-      const response = await fetch(`${API_URL}/users/${user.id}/role`, {
+      const response = await apiFetch(`/users/${user.id}/role`, {
         method: 'PATCH',
-        headers: {
-          ...headers,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ role: newRole }),
       });
 
@@ -315,6 +288,42 @@ export default function UsersPage() {
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'Could not change employee role.',
+      );
+    }
+  }
+
+  async function handleResetPassword(user: User) {
+    if (
+      !window.confirm(
+        `Reset the password of "${user.name}"? They will be logged out everywhere.`,
+      )
+    ) {
+      return;
+    }
+
+    setMessage('');
+    setError('');
+
+    try {
+      const response = await apiFetch(`/auth/users/${user.id}/reset-password`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          await getErrorMessage(response, 'Could not reset the password.'),
+        );
+      }
+
+      const { temporaryPassword } = (await response.json()) as {
+        temporaryPassword: string;
+      };
+      setMessage(
+        `Temporary password for ${user.name}: ${temporaryPassword} — give it to them privately. They must change it when they log in.`,
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Could not reset the password.',
       );
     }
   }
@@ -465,15 +474,16 @@ export default function UsersPage() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   required
-                  minLength={8}
+                  minLength={12}
                   maxLength={72}
                   autoComplete="new-password"
                   className="w-full rounded-lg border border-gray-300 p-3 outline-none focus:border-blue-500"
-                  placeholder="At least 8 characters"
+                  placeholder="At least 12 characters"
                 />
                 <p className="mt-1 text-xs text-gray-500">
-                  Password is required when creating an employee. Editing
-                  an employee does not change their password.
+                  A first password only: the employee must replace it when
+                  they first log in. Editing an employee does not change
+                  their password.
                 </p>
               </div>
             )}
@@ -619,6 +629,18 @@ export default function UsersPage() {
                               >
                                 Edit
                               </button>
+
+                              {user.id !== currentUserId &&
+                                (user.role === 'user' ||
+                                  currentRole === 'super_admin') && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleResetPassword(user)}
+                                    className="whitespace-nowrap rounded-md bg-slate-100 px-3 py-2 text-slate-800 hover:bg-slate-200"
+                                  >
+                                    Reset password
+                                  </button>
+                                )}
 
                               <button
                                 type="button"

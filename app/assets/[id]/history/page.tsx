@@ -5,7 +5,7 @@ import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
-import { API_URL } from '@/lib/config';
+import { apiFetch } from '@/lib/api';
 
 type HistoryUser = {
   id: number;
@@ -65,7 +65,6 @@ async function getResponseError(response: Response): Promise<string> {
   const errorData = await response.json().catch(() => null);
 
   if (response.status === 401) {
-    sessionStorage.removeItem('access_token');
     window.location.assign('/login');
     return 'Your session has expired. Please log in again.';
   }
@@ -97,21 +96,8 @@ function AssetHistoryPageContent() {
       setError('');
 
       try {
-        const token = sessionStorage.getItem('access_token');
 
-        if (!token) {
-          window.location.assign('/login');
-          throw new Error('Please log in to continue.');
-        }
-
-        const response = await fetch(
-          `${API_URL}/assets/${assetId}/history`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
-        );
+        const response = await apiFetch(`/assets/${assetId}/history`);
 
         if (!response.ok) {
           throw new Error(await getResponseError(response));

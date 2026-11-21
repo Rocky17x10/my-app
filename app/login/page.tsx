@@ -3,9 +3,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { API_URL } from '@/lib/config';
-
-type UserRole = 'super_admin' | 'admin' | 'user';
+import { apiFetch, homePathFor, type SessionUser } from '@/lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,17 +20,11 @@ export default function LoginPage() {
     setError('');
 
     try {
-      // Step 1: Send login credentials to the backend.
-      const loginResponse = await fetch(
-        `${API_URL}/auth/login`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email, password }),
-        },
-      );
+      // The backend sets the session as HttpOnly cookies; no token reaches this code.
+      const loginResponse = await apiFetch('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
 
       const loginData = await loginResponse.json();
 
@@ -44,57 +36,13 @@ export default function LoginPage() {
         );
       }
 
-      // Step 2: Receive the JWT token.
-      const token: string = loginData.access_token;
+      const user = loginData.user as SessionUser;
 
-      if (!token) {
-        throw new Error(
-          'The backend did not return an access token.',
-        );
-      }
-
-      // Step 3: Verify the token and get the current user role.
-      const profileResponse = await fetch(
-        `${API_URL}/auth/profile`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
+      // An admin chose this password: it must be replaced first.
+      router.push(
+        user.mustChangePassword ? '/change-password' : homePathFor(user.role),
       );
-
-      const profileData = await profileResponse.json();
-
-      if (!profileResponse.ok) {
-        throw new Error(
-          'Login succeeded, but profile access failed.',
-        );
-      }
-
-      const role = profileData.user?.role as UserRole | undefined;
-
-      if (
-        role !== 'super_admin' &&
-        role !== 'admin' &&
-        role !== 'user'
-      ) {
-        throw new Error(
-          'Your account has an invalid or missing role.',
-        );
-      }
-
-      // Step 4: Save the token for this browser tab's session.
-      sessionStorage.setItem('access_token', token);
-
-      // Step 5: Redirect according to account role.
-      if (role === 'super_admin' || role === 'admin') {
-        router.push('/dashboard');
-      } else {
-        router.push('/my-assets');
-      }
     } catch (err) {
-      sessionStorage.removeItem('access_token');
-
       setError(
         err instanceof Error
           ? err.message

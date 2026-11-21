@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
-import { API_URL } from '@/lib/config';
+import { apiFetch } from '@/lib/api';
 
 type User = {
   id: number;
@@ -114,19 +114,6 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong.';
 }
 
-function getAuthHeaders(): Record<string, string> {
-  const token = sessionStorage.getItem('access_token');
-
-  if (!token) {
-    window.location.assign('/login');
-    throw new Error('Your session has expired. Please log in again.');
-  }
-
-  return {
-    Authorization: `Bearer ${token}`,
-  };
-}
-
 async function getResponseError(
   response: Response,
   fallback: string,
@@ -134,7 +121,6 @@ async function getResponseError(
   const errorData = await response.json().catch(() => null);
 
   if (response.status === 401) {
-    sessionStorage.removeItem('access_token');
     window.location.assign('/login');
     return 'Your session has expired. Please log in again.';
   }
@@ -187,11 +173,10 @@ export default function DashboardPage() {
     setAssetError('');
 
     try {
-      const headers = getAuthHeaders();
 
       const [profileResponse, assetsResponse] = await Promise.all([
-        fetch(`${API_URL}/auth/profile`, { headers }),
-        fetch(`${API_URL}/assets`, { headers }),
+        apiFetch(`/auth/profile`),
+        apiFetch(`/assets`),
       ]);
 
       if (!profileResponse.ok) {
@@ -225,9 +210,7 @@ export default function DashboardPage() {
 
       // Only administrators need the employee list.
       if (role === 'admin' || role === 'super_admin') {
-        const usersResponse = await fetch(`${API_URL}/users`, {
-          headers,
-        });
+        const usersResponse = await apiFetch(`/users`);
 
         if (!usersResponse.ok) {
           throw new Error(
@@ -251,7 +234,7 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    // shortcut: refreshData sets state before its first await (loading reset; catch path when the token is missing). Replace with the shared API client + data hook in Phase 5.
+    // shortcut: refreshData sets state before its first await (loading reset). Replace with a data hook in Phase 5.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshData();
   }, []);
@@ -308,23 +291,18 @@ export default function DashboardPage() {
     setAssetMessage('');
 
     try {
-      const headers = getAuthHeaders();
 
       const url = editingAssetId
-        ? `${API_URL}/assets/${editingAssetId}`
-        : `${API_URL}/assets`;
+        ? `/assets/${editingAssetId}`
+        : `/assets`;
 
       const payload = {
         ...assetForm,
         purchaseDate: assetForm.purchaseDate || null,
       };
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: editingAssetId ? 'PATCH' : 'POST',
-        headers: {
-          ...headers,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(payload),
       });
 
@@ -384,16 +362,11 @@ export default function DashboardPage() {
     setAssetMessage('');
 
     try {
-      const headers = getAuthHeaders();
 
-      const response = await fetch(
-        `${API_URL}/assets/${selectedAsset.id}/assign`,
+      const response = await apiFetch(
+        `/assets/${selectedAsset.id}/assign`,
         {
           method: 'POST',
-          headers: {
-            ...headers,
-            'Content-Type': 'application/json',
-          },
           body: JSON.stringify({
             userId: Number(selectedEmployeeId),
           }),
@@ -436,13 +409,11 @@ export default function DashboardPage() {
     setAssetMessage('');
 
     try {
-      const headers = getAuthHeaders();
 
-      const response = await fetch(
-        `${API_URL}/assets/${asset.id}/unassign`,
+      const response = await apiFetch(
+        `/assets/${asset.id}/unassign`,
         {
           method: 'PATCH',
-          headers,
         },
       );
 

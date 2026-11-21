@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { API_URL } from '@/lib/config';
+import { apiFetch, logout } from '@/lib/api';
 
 type UserRole = 'super_admin' | 'admin' | 'user';
 
@@ -28,25 +28,11 @@ export default function DashboardPage() {
     let cancelled = false;
 
     async function loadProfile() {
-      const token = sessionStorage.getItem('access_token');
-
-      if (!token) {
-        router.replace('/login');
-        return;
-      }
 
       try {
-        const response = await fetch(
-          `${API_URL}/auth/profile`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
-        );
+        const response = await apiFetch(`/auth/profile`);
 
         if (!response.ok) {
-          sessionStorage.removeItem('access_token');
           router.replace('/login');
           return;
         }
@@ -92,8 +78,8 @@ export default function DashboardPage() {
     };
   }, [router]);
 
-  function handleLogout() {
-    sessionStorage.removeItem('access_token');
+  async function handleLogout() {
+    await logout();
     router.replace('/login');
   }
 

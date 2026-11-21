@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { API_URL } from '@/lib/config';
+import { apiFetch } from '@/lib/api';
 
 type AssetRequest = {
   id: number;
@@ -42,18 +42,13 @@ export default function MyRequestsPage() {
   const [category, setCategory] = useState("Computer");
   const [reason, setReason] = useState("");
 
-  const getToken = () => sessionStorage.getItem("access_token");
 
-  const loadRequests = useCallback(async (token: string) => {
-    const response = await fetch(`${API_URL}/asset-requests/my`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+  const loadRequests = useCallback(async () => {
+    const response = await apiFetch(`/asset-requests/my`, {
       cache: "no-store",
     });
 
     if (response.status === 401) {
-      sessionStorage.removeItem("access_token");
       router.push("/login");
       return;
     }
@@ -68,23 +63,13 @@ export default function MyRequestsPage() {
 
   useEffect(() => {
     const loadPage = async () => {
-      const token = getToken();
-
-      if (!token) {
-        router.push("/login");
-        return;
-      }
 
       try {
-        const profileResponse = await fetch(`${API_URL}/auth/profile`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+        const profileResponse = await apiFetch(`/auth/profile`, {
           cache: "no-store",
         });
 
         if (!profileResponse.ok) {
-          sessionStorage.removeItem("access_token");
           router.push("/login");
           return;
         }
@@ -101,7 +86,7 @@ export default function MyRequestsPage() {
         }
 
         setProfile(currentUser);
-        await loadRequests(token);
+        await loadRequests();
       } catch (err) {
         setError(
           err instanceof Error
@@ -127,22 +112,12 @@ export default function MyRequestsPage() {
       return;
     }
 
-    const token = getToken();
-
-    if (!token) {
-      router.push("/login");
-      return;
-    }
 
     setSubmitting(true);
 
     try {
-      const response = await fetch(`${API_URL}/asset-requests`, {
+      const response = await apiFetch(`/asset-requests`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify({
           itemName: itemName.trim(),
           category,
@@ -153,7 +128,6 @@ export default function MyRequestsPage() {
       const data = await response.json().catch(() => ({}));
 
       if (response.status === 401) {
-        sessionStorage.removeItem("access_token");
         router.push("/login");
         return;
       }
@@ -169,7 +143,7 @@ export default function MyRequestsPage() {
       setReason("");
       setSuccess("Your asset request was submitted successfully.");
 
-      await loadRequests(token);
+      await loadRequests();
     } catch (err) {
       setError(
         err instanceof Error
