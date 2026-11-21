@@ -9,7 +9,7 @@ import { apiFetch, logout } from '@/lib/api';
 type UserRole = 'super_admin' | 'admin' | 'user';
 
 type Profile = {
-  userId: number;
+  id: number;
   email: string;
   name: string;
   role: UserRole;
@@ -226,7 +226,7 @@ export default function DashboardPage() {
 
         <p><strong>Name:</strong> {profile.name}</p>
         <p><strong>Email:</strong> {profile.email}</p>
-        <p><strong>User ID:</strong> {profile.userId}</p>
+        <p><strong>User ID:</strong> {profile.id}</p>
         <p>
           <strong>Role:</strong>{' '}
           {isSuperAdmin ? 'Super Admin' : 'Admin'}

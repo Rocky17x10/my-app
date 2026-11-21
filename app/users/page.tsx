@@ -16,7 +16,7 @@ type User = {
   isActive: boolean;
 };
 
-import { apiFetch } from '@/lib/api';
+import { apiFetch, apiFetchAll } from '@/lib/api';
 
 async function getErrorMessage(
   response: Response,
@@ -88,7 +88,7 @@ export default function UsersPage() {
     try {
 
       const [usersResponse, profileResponse] = await Promise.all([
-        apiFetch(`/users`),
+        apiFetchAll(`/users`),
         apiFetch(`/auth/profile`),
       ]);
 
@@ -112,7 +112,7 @@ export default function UsersPage() {
       const profileUser = profileData.user || profileData;
 
       setCurrentRole(profileUser.role || null);
-      setCurrentUserId(profileUser.id || profileUser.userId || null);
+      setCurrentUserId(profileUser.id ?? null);
     } catch (err) {
       setError(
         err instanceof Error

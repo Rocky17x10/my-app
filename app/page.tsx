@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
-import { apiFetch } from '@/lib/api';
+import { apiFetch, apiFetchAll } from '@/lib/api';
 
 type User = {
   id: number;
@@ -178,7 +178,7 @@ export default function DashboardPage() {
 
       const [profileResponse, assetsResponse] = await Promise.all([
         apiFetch(`/auth/profile`),
-        apiFetch(`/assets`),
+        apiFetchAll(`/assets`),
       ]);
 
       if (!profileResponse.ok) {
@@ -208,12 +208,12 @@ export default function DashboardPage() {
         '';
 
       setCurrentRole(role);
-      setCurrentUserId(profileData.user?.userId ?? null);
+      setCurrentUserId(profileData.user?.id ?? null);
       setAssets(Array.isArray(assetsData) ? assetsData : []);
 
       // Only administrators need the employee list.
       if (role === 'admin' || role === 'super_admin') {
-        const usersResponse = await apiFetch(`/users`);
+        const usersResponse = await apiFetchAll(`/users`);
 
         if (!usersResponse.ok) {
           throw new Error(

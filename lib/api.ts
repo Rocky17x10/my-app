@@ -92,6 +92,41 @@ export async function apiFetch(
   return response;
 }
 
+/**
+ * Loads every page of a paginated list endpoint (`{ data, totalPages }`) and returns a
+ * Response whose body is the combined array, so callers keep their array handling.
+ * On the first failing page that page's response is returned unchanged.
+ * shortcut: pages still load whole lists and filter on the client; switch them to
+ * server-side paging and search (`?page=&search=`) in Phase 5.
+ */
+export async function apiFetchAll(
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const items: unknown[] = [];
+  const separator = path.includes('?') ? '&' : '?';
+
+  for (let page = 1; ; page++) {
+    const response = await apiFetch(
+      `${path}${separator}page=${page}&limit=100`,
+      init,
+    );
+    if (!response.ok) return response;
+
+    const body = (await response.json()) as {
+      data: unknown[];
+      totalPages: number;
+    };
+    items.push(...body.data);
+    if (page >= body.totalPages) break;
+  }
+
+  return new Response(JSON.stringify(items), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 /** Ends the session on the server and clears the cookies. Never throws. */
 export async function logout(): Promise<void> {
   await apiFetch('/auth/logout', { method: 'POST' }).catch(() => undefined);

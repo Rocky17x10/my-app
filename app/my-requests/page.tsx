@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { apiFetch } from '@/lib/api';
+import { apiFetch, apiFetchAll } from '@/lib/api';
 
 type AssetRequest = {
   id: number;
@@ -21,7 +21,7 @@ type AssetRequest = {
 };
 
 type UserProfile = {
-  userId: number;
+  id: number;
   name: string;
   email: string;
   role: string;
@@ -44,7 +44,7 @@ export default function MyRequestsPage() {
 
 
   const loadRequests = useCallback(async () => {
-    const response = await apiFetch(`/asset-requests/my`, {
+    const response = await apiFetchAll(`/asset-requests/my`, {
       cache: "no-store",
     });
 

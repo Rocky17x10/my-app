@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { apiFetch, logout } from '@/lib/api';
+import { apiFetch, apiFetchAll, logout } from '@/lib/api';
 
 interface Asset {
   id: number;
@@ -22,7 +22,7 @@ interface Asset {
 }
 
 interface Profile {
-  userId: number;
+  id: number;
   name: string;
   email: string;
   role: string;
@@ -68,7 +68,7 @@ export default function MyAssetsPage() {
 
         setProfile(currentUser);
 
-        const assetsResponse = await apiFetch(`/assets`);
+        const assetsResponse = await apiFetchAll(`/assets`);
 
         if (!assetsResponse.ok) {
           if (assetsResponse.status === 401) {
