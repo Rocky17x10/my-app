@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { API_URL } from '@/lib/config';
 
 type UserRole = 'super_admin' | 'admin' | 'user';
 
@@ -36,7 +37,7 @@ export default function DashboardPage() {
 
       try {
         const response = await fetch(
-          'http://localhost:3001/auth/profile',
+          `${API_URL}/auth/profile`,
           {
             headers: {
               Authorization: `Bearer ${token}`,

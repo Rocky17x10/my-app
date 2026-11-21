@@ -1,11 +1,11 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
-const API_URL = 'http://localhost:3001';
+import { API_URL } from '@/lib/config';
 
 type HistoryUser = {
   id: number;
@@ -83,7 +83,7 @@ async function getResponseError(response: Response): Promise<string> {
   return `Could not load assignment history. (HTTP ${response.status})`;
 }
 
-export default function AssetHistoryPage() {
+function AssetHistoryPageContent() {
   const params = useParams<{ id: string }>();
   const assetId = params.id;
 
@@ -491,5 +491,14 @@ export default function AssetHistoryPage() {
         </footer>
       </div>
     </main>
+  );
+}
+
+// cacheComponents: useParams() on a dynamic route must render inside Suspense, or next build fails
+export default function AssetHistoryPage() {
+  return (
+    <Suspense fallback={null}>
+      <AssetHistoryPageContent />
+    </Suspense>
   );
 }

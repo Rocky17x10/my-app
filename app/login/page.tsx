@@ -3,6 +3,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { API_URL } from '@/lib/config';
 
 type UserRole = 'super_admin' | 'admin' | 'user';
 
@@ -23,7 +24,7 @@ export default function LoginPage() {
     try {
       // Step 1: Send login credentials to the backend.
       const loginResponse = await fetch(
-        'http://localhost:3001/auth/login',
+        `${API_URL}/auth/login`,
         {
           method: 'POST',
           headers: {
@@ -54,7 +55,7 @@ export default function LoginPage() {
 
       // Step 3: Verify the token and get the current user role.
       const profileResponse = await fetch(
-        'http://localhost:3001/auth/profile',
+        `${API_URL}/auth/profile`,
         {
           headers: {
             Authorization: `Bearer ${token}`,

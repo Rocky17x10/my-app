@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-const API_URL = "http://localhost:3001";
+import { API_URL } from '@/lib/config';
 
 interface Asset {
   id: number;

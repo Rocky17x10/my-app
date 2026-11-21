@@ -1,11 +1,11 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 
-const API_URL = 'http://localhost:3001';
+import { API_URL } from '@/lib/config';
 
 type HistoryRecord = {
   id: number;
@@ -38,7 +38,7 @@ function formatDate(value: string | null) {
   return new Date(value).toLocaleString();
 }
 
-export default function EmployeeHistoryPage() {
+function EmployeeHistoryPageContent() {
   const params = useParams<{ id: string }>();
   const employeeId = params.id;
 
@@ -285,5 +285,14 @@ export default function EmployeeHistoryPage() {
         </p>
       </div>
     </main>
+  );
+}
+
+// cacheComponents: useParams() on a dynamic route must render inside Suspense, or next build fails
+export default function EmployeeHistoryPage() {
+  return (
+    <Suspense fallback={null}>
+      <EmployeeHistoryPageContent />
+    </Suspense>
   );
 }

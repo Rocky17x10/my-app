@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-const API_URL = "http://localhost:3001";
+import { API_URL } from '@/lib/config';
 
 type AssetRequest = {
   id: number;
@@ -371,7 +371,7 @@ export default function MyRequestsPage() {
               {requests.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-gray-600 font-medium">
-                    You haven't submitted any requests yet.
+                    You haven&apos;t submitted any requests yet.
                   </p>
                   <p className="text-sm text-gray-400 mt-2">
                     Your submitted requests will appear here.

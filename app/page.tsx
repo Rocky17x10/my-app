@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
-const API_URL = 'http://localhost:3001';
+import { API_URL } from '@/lib/config';
 
 type User = {
   id: number;
@@ -251,6 +251,8 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
+    // shortcut: refreshData sets state before its first await (loading reset; catch path when the token is missing). Replace with the shared API client + data hook in Phase 5.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshData();
   }, []);
 

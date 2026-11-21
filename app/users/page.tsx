@@ -15,7 +15,7 @@ type User = {
   role: UserRole;
 };
 
-const API_URL = 'http://localhost:3001';
+import { API_URL } from '@/lib/config';
 
 function getAuthHeaders(): HeadersInit {
   const token = sessionStorage.getItem('access_token');
@@ -139,6 +139,8 @@ export default function UsersPage() {
   }
 
   useEffect(() => {
+    // shortcut: fetchUsers sets state before its first await (loading reset; catch path when the token is missing). Replace with the shared API client + data hook in Phase 5.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchUsers();
   }, []);
 

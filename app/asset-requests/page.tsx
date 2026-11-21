@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-const API_URL = "http://localhost:3001";
+import { API_URL } from '@/lib/config';
 
 type RequestStatus = "pending" | "approved" | "rejected";
 
