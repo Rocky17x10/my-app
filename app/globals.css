@@ -1,26 +1,148 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens. Components use only these (bg-surface, text-muted, border-border, bg-primary, …),
+ * never raw palette colours, so light and dark mode stay readable everywhere.
+ *
+ * Tones (primary, info, success, warning, danger, neutral, teal, pink) are text-strength colours:
+ * readable as text on `surface` in both modes (WCAG AA). For a tinted chip or badge use the tone
+ * with an opacity modifier as background: `bg-success/12 text-success`.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  color-scheme: light;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --background: #f5f6fa; /* app canvas */
+  --surface: #ffffff; /* panels, tables, inputs */
+  --surface-muted: #f1f3f8; /* table header, hover, wells */
+  --border: #e2e5ee;
+  --border-strong: #c8cdda;
+  --foreground: #151826;
+  --muted: #5a6275; /* secondary text, 6:1 on surface */
+
+  --primary: #5b4cdb; /* indigo-violet: the brand accent */
+  --primary-hover: #4a3bc4;
+  --primary-foreground: #ffffff;
+  --ring: #6b5cf0;
+
+  --info: #1d5fd1; /* blue: assigned, in progress */
+  --success: #116b33; /* green: available, approved, completed */
+  --warning: #a44a0a; /* amber: pending, maintenance */
+  --danger: #b42318; /* red: retired, rejected, urgent */
+  --danger-hover: #93170f;
+  --neutral: #4b5565; /* slate: closed, low */
+  --teal: #0d6b63;
+  --pink: #be185d;
+
+  --shadow-color: 235 30% 20%;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    color-scheme: dark;
+
+    --background: #0e1017;
+    --surface: #161925;
+    --surface-muted: #1d2130;
+    --border: #2a2f40;
+    --border-strong: #3b4155;
+    --foreground: #e7e9f1;
+    --muted: #9ba2b5;
+
+    --primary: #a399ff;
+    --primary-hover: #b9b2ff;
+    --primary-foreground: #17123f;
+    --ring: #a399ff;
+
+    --info: #7db3ff;
+    --success: #5ccb8a;
+    --warning: #edb04b;
+    --danger: #f47c7c;
+    --danger-hover: #f79d9d;
+    --neutral: #a6aec0;
+    --teal: #4fd1c5;
+    --pink: #f472b6;
+
+    --shadow-color: 235 50% 2%;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-ring: var(--ring);
+  --color-info: var(--info);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-neutral: var(--neutral);
+  --color-teal: var(--teal);
+  --color-pink: var(--pink);
+
+  /* Brand gradient, the same in both modes; always with white text on top. */
+  --color-brand-deep: #261c7a;
+  --color-brand: #5446d6;
+  --color-brand-blue: #1d5fd1;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Radius by hierarchy: controls md, panels lg, overlays xl. */
+  --radius-md: 0.375rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+
+  /* Panels are flat (border only); shadows are for things that float. */
+  --shadow-overlay:
+    0 16px 40px -12px hsl(var(--shadow-color) / 0.35),
+    0 2px 6px hsl(var(--shadow-color) / 0.1);
+  --shadow-raised: 0 1px 2px hsl(var(--shadow-color) / 0.08);
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 25%, transparent);
+  }
+
+  dialog::backdrop {
+    background: hsl(var(--shadow-color) / 0.5);
+    backdrop-filter: blur(2px);
+  }
+
+  /* Popovers are positioned by components/ui/popover.tsx. */
+  [popover] {
+    margin: 0;
+    inset: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
