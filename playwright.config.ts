@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+
 import { defineConfig } from '@playwright/test';
 
 /*
@@ -5,6 +8,10 @@ import { defineConfig } from '@playwright/test';
  * E2E_BASE_URL (default http://localhost:3000) and the E2E_* accounts in e2e/accounts.ts.
  * They only read data, so they are safe against a dev database.
  */
+
+// The E2E_* settings may live in the git-ignored .env; variables already set in the shell win.
+const envFile = path.join(__dirname, '.env');
+if (existsSync(envFile)) process.loadEnvFile(envFile);
 export default defineConfig({
   testDir: './e2e',
   workers: 1, // the API throttles logins; one worker signs in once per role

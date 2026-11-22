@@ -12,7 +12,7 @@ Next.js 16 frontend for the IT Asset Management system: admins manage assets, pe
 
 ```bash
 npm ci
-cp .env.example .env.local     # NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
+cp .env.example .env           # NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
 npm run dev                    # http://localhost:3000 (use -p 3002 if 3000 is taken)
 ```
 
@@ -31,7 +31,7 @@ Add the frontend's origin to the API's `FRONTEND_URL` so the browser may call it
 
 ## Browser tests
 
-`npm run test:e2e` signs in once as an admin and once as an employee, then opens every page: each must render its heading without errors and must not scroll sideways at phone width; role redirects are checked too. The tests only read data. They need the app and the API running and these variables (use existing accounts that have already changed their first password; never commit the values):
+`npm run test:e2e` signs in once as an admin and once as an employee, then opens every page: each must render its heading without errors and must not scroll sideways at phone width; role redirects are checked too. The tests only read data. They need the app and the API running and these variables, set in the shell or in `.env` (use existing accounts that have already changed their first password; never commit the values):
 
 ```bash
 E2E_BASE_URL=http://localhost:3000        # optional, this is the default

@@ -5,7 +5,7 @@ const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
 if (!apiUrl) {
   throw new Error(
-    'NEXT_PUBLIC_API_URL is not set. Copy .env.example to .env.local and fill it in.',
+    'NEXT_PUBLIC_API_URL is not set. Copy .env.example to .env and fill it in.',
   );
 }
 
