@@ -78,12 +78,14 @@ export function findNavItem(pathname: string, items: NavItem[] = NAV_ITEMS): Nav
   return best;
 }
 
-/** Where a notification leads. Ticket pages may add `?id=` support later. */
+/** Where a notification leads. */
 export function notificationHref(notification: Notification, role: UserRole): string {
   const admin = isAdminRole(role);
   switch (notification.type) {
-    case 'support_ticket':
-      return admin ? '/tickets' : '/support';
+    case 'support_ticket': {
+      const list = admin ? '/tickets' : '/support';
+      return notification.ticket ? `${list}/${notification.ticket.id}` : list;
+    }
     case 'asset_request_new':
       return '/asset-requests';
     case 'asset_request_approved':

@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 
-import { PlaceholderPage } from '@/components/shell/placeholder-page';
+import { MyReturnsView } from './my-returns-view';
 
 export const metadata: Metadata = { title: 'My returns' };
 
-export default function Page() {
-  return <PlaceholderPage title="My returns" description="Devices you are handing back to IT." />;
+export default function MyReturnsPage() {
+  return <MyReturnsView />;
 }

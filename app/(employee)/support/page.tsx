@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 
-import { PlaceholderPage } from '@/components/shell/placeholder-page';
+import { SupportView } from './support-view';
 
 export const metadata: Metadata = { title: 'Support' };
 
-export default function Page() {
-  return <PlaceholderPage title="Support" description="Ask IT for help and follow your tickets." />;
+export default function SupportPage() {
+  return <SupportView />;
 }

@@ -53,7 +53,7 @@ components/
   shell/                  app-shell, sidebar, top-bar, notifications-bell, profile-menu,
                           nav.ts (ALL routes), current-user (useCurrentUser), brand, placeholder-page
 lib/
-  api/index.ts            apiFetch, api.get/post/patch/delete, getPage, ApiError, apiFetchAll, logout, roles
+  api/index.ts            apiFetch, api.get/post/patch/delete, getPage, ApiError, logout, roles
   hooks/                  useApi, usePagedList
   config.ts               API_URL (from NEXT_PUBLIC_API_URL)
   format.ts               formatDate, formatDateTime, timeAgo, formatMoney
@@ -187,7 +187,6 @@ export function MaintenanceView() {
 | `getPage<T>(path, query)` | One page `{ data, total, page, limit, totalPages }`. |
 | `ApiError` (`status`, `message: string`, `code?`), `errorMessage(err, fallback?)` | Show `errorMessage(err)` to users; validation arrays are already joined. |
 | `apiFetch(path, init)` | Low level (returns `Response`); handles cookies, one refresh + retry on 401 (single-flight, Web Lock across tabs), 401 → `/login?expired=1&next=…`, 403 `PASSWORD_CHANGE_REQUIRED` → `/change-password`. |
-| `apiFetchAll(path)` | Old pages only (loads every page). New code pages on the server. |
 | `logout()`, `homePathFor(role)`, `isAdminRole(role)`, `ROLE_LABELS` | Session helpers. To sign out from UI use `signOut()` from `@/components/shell` (full reload). |
 
 **Hooks** (`@/lib/hooks`).

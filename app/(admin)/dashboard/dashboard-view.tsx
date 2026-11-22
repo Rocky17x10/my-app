@@ -6,10 +6,12 @@ import {
   ChevronRight,
   CircleExclamationPoint,
   Laptop,
+  LifeBuoy,
   PackagePlus,
   Undo2,
   UserPlus,
   Users,
+  Wrench,
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -206,6 +208,33 @@ export function DashboardView() {
           tone="warning"
           hint={summary.pendingRequests > 0 ? 'Waiting for review' : 'All reviewed'}
           href="/asset-requests"
+        />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard
+          label="Pending returns"
+          value={summary.pendingReturns.toLocaleString()}
+          icon={Undo2}
+          tone="pink"
+          hint={summary.pendingReturns > 0 ? 'Waiting for inspection' : 'Nothing to inspect'}
+          href="/returns"
+        />
+        <StatCard
+          label="In maintenance"
+          value={summary.inProgressMaintenance.toLocaleString()}
+          icon={Wrench}
+          tone="warning"
+          hint={summary.inProgressMaintenance > 0 ? 'Repairs in progress' : 'No open repairs'}
+          href="/maintenance"
+        />
+        <StatCard
+          label="Open tickets"
+          value={summary.openTickets.toLocaleString()}
+          icon={LifeBuoy}
+          tone="danger"
+          hint={summary.openTickets > 0 ? 'Need a response' : 'All caught up'}
+          href="/tickets"
         />
       </div>
 

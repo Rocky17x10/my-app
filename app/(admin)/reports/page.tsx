@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 
-import { PlaceholderPage } from '@/components/shell/placeholder-page';
+import { ReportsView } from './reports-view';
 
 export const metadata: Metadata = { title: 'Reports' };
 
-export default function Page() {
-  return <PlaceholderPage title="Reports" description="Lists of assets, people and history to export or print." />;
+export default function ReportsPage() {
+  return <ReportsView />;
 }

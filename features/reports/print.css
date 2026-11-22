@@ -1,0 +1,70 @@
+/*
+ * Print layout of a report. The reports page portals `.report-print` to <body> only while
+ * printing, so these rules never touch other pages. Paper is always white: plain black/grey here.
+ */
+.report-print {
+  display: none;
+}
+
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  body:has(> .report-print) {
+    background: #fff;
+  }
+
+  body:has(> .report-print) > :not(.report-print) {
+    display: none !important;
+  }
+
+  .report-print {
+    display: block;
+    color: #000;
+    font-size: 9pt;
+    line-height: 1.35;
+  }
+
+  .report-print h1 {
+    margin: 0 0 2pt;
+    font-size: 15pt;
+    font-weight: 600;
+  }
+
+  .report-print .report-print-meta {
+    margin: 0 0 10pt;
+    color: #444;
+  }
+
+  .report-print table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .report-print thead {
+    display: table-header-group;
+  }
+
+  .report-print th {
+    padding: 3pt 5pt;
+    border-bottom: 1.5pt solid #000;
+    font-weight: 600;
+    text-align: left;
+  }
+
+  .report-print td {
+    padding: 3pt 5pt;
+    border-bottom: 0.5pt solid #bbb;
+    vertical-align: top;
+  }
+
+  .report-print tr {
+    break-inside: avoid;
+  }
+
+  .report-print .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+}

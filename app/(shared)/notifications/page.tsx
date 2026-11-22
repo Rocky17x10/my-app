@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 
-import { PlaceholderPage } from '@/components/shell/placeholder-page';
+import { NotificationsView } from './notifications-view';
 
 export const metadata: Metadata = { title: 'Notifications' };
 
-export default function Page() {
-  return <PlaceholderPage title="Notifications" description="Assignments, request decisions and ticket replies." />;
+export default function NotificationsPage() {
+  return <NotificationsView />;
 }
