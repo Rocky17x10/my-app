@@ -1,3 +1,4 @@
+
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 
@@ -6,13 +7,17 @@ import { AssetHistoryView } from './history-view';
 
 export const metadata: Metadata = { title: 'Asset history' };
 
-async function HistoryForParams({ params }: Pick<PageProps<'/assets/[id]/history'>, 'params'>) {
+type HistoryPageProps = {
+  params: Promise<{ id: string }>;
+};
+
+async function HistoryForParams({ params }: HistoryPageProps) {
   const { id } = await params;
   return <AssetHistoryView id={id} />;
 }
 
-// cacheComponents: the params are request data, so they are read inside Suspense.
-export default function AssetHistoryPage({ params }: PageProps<'/assets/[id]/history'>) {
+// cacheComponents: params are request data, so they are read inside Suspense.
+export default function AssetHistoryPage({ params }: HistoryPageProps) {
   return (
     <Suspense fallback={<Skeleton className="h-96 rounded-lg" />}>
       <HistoryForParams params={params} />
